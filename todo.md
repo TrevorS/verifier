@@ -108,40 +108,40 @@
 
 ## 4. Dataset Preparation with HF Datasets
 
-- [ ] Create `src/dataset.py` for dataset handling
-  - [ ] Implement function to load JSONL data
-    - [ ] Use datasets.load_dataset with 'json' format
-    - [ ] Configure train/validation splits
-    - [ ] Add caching configuration
+- [x] Create `src/dataset.py` for dataset handling
+  - [x] Implement function to load JSONL data
+    - [x] Use datasets.load_dataset with 'json' format
+    - [x] Configure train/validation splits
+    - [x] Add caching configuration
 
-  - [ ] Implement tokenizer configuration
-    - [ ] Load FLAN-T5 tokenizer
-    - [ ] Configure for sequence-to-sequence tasks
-    - [ ] Handle special tokens
-    - [ ] Set maximum lengths
+  - [x] Implement tokenizer configuration
+    - [x] Load FLAN-T5 tokenizer
+    - [x] Configure for sequence-to-sequence tasks
+    - [x] Handle special tokens
+    - [x] Set maximum lengths
 
-  - [ ] Implement dataset preprocessing function
-    - [ ] Apply tokenization to input and target
-    - [ ] Format texts consistently
-    - [ ] Apply text normalization
-    - [ ] Map preprocessing over dataset
+  - [x] Implement dataset preprocessing function
+    - [x] Apply tokenization to input and target
+    - [x] Format texts consistently
+    - [x] Apply text normalization
+    - [x] Map preprocessing over dataset
 
-  - [ ] Set up data collator
-    - [ ] Use DataCollatorForSeq2Seq
-    - [ ] Configure label padding
-    - [ ] Set up dynamic padding
+  - [x] Set up data collator
+    - [x] Use DataCollatorForSeq2Seq
+    - [x] Configure label padding
+    - [x] Set up dynamic padding
 
-  - [ ] Create complete dataset preparation function
-    - [ ] Load data from JSONL
-    - [ ] Apply preprocessing
-    - [ ] Configure data collator
-    - [ ] Return prepared datasets
+  - [x] Create complete dataset preparation function
+    - [x] Load data from JSONL
+    - [x] Apply preprocessing
+    - [x] Configure data collator
+    - [x] Return prepared datasets
 
-- [ ] Create test script for dataset verification
-  - [ ] Verify tokenization works correctly
-  - [ ] Check dataset formatting
-  - [ ] Ensure compatibility with HF Trainer
-  - [ ] Test dataset loading speed
+- [x] Create test script for dataset verification
+  - [x] Verify tokenization works correctly
+  - [x] Check dataset formatting
+  - [x] Ensure compatibility with HF Trainer
+  - [x] Test dataset loading speed
 
 ## 5. Model Configuration with HF Transformers
 

@@ -81,16 +81,18 @@ def preprocess_dataset(
             truncation=True,
         )
 
-        # Tokenize targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                targets,
-                max_length=max_target_length,
-                padding="max_length",
-                truncation=True,
-            )
+        # Tokenize targets separately
+        # Using the modern approach to tokenize targets
+        # (instead of with the deprecated as_target_tokenizer)
+        target_encoding = tokenizer(
+            targets,
+            max_length=max_target_length,
+            padding="max_length",
+            truncation=True,
+        )
 
-        model_inputs["labels"] = labels["input_ids"]
+        # Add the target token ids as labels
+        model_inputs["labels"] = target_encoding["input_ids"]
 
         return model_inputs
 
