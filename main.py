@@ -2,6 +2,7 @@
 """
 Main entry point for the monetary expressions to JSON converter.
 """
+
 import argparse
 import logging
 import sys
@@ -28,10 +29,10 @@ def train(args):
     logger.info(f"Using model: {config.MODEL_NAME}")
     logger.info(f"Training data: {config.TRAIN_DATA_PATH}")
     logger.info(f"Validation data: {config.VAL_DATA_PATH}")
-    
+
     # Import here to avoid loading modules unnecessarily
     from src.trainer import train_model
-    
+
     train_model(
         model_name=config.MODEL_NAME,
         train_data_path=config.TRAIN_DATA_PATH,
@@ -47,10 +48,10 @@ def evaluate(args):
     logger.info("Starting evaluation...")
     logger.info(f"Model path: {args.model_path}")
     logger.info(f"Test data: {args.test_data_path}")
-    
+
     # Import here to avoid loading modules unnecessarily
     from src.evaluation import evaluate_model
-    
+
     evaluate_model(
         model_path=args.model_path,
         test_data_path=args.test_data_path,
@@ -63,26 +64,26 @@ def infer(args):
     """Run inference with the model."""
     logger.info("Starting inference...")
     logger.info(f"Model path: {args.model_path}")
-    
+
     # Import here to avoid loading modules unnecessarily
     from src.inference import run_inference
-    
+
     if args.input_file:
         logger.info(f"Input file: {args.input_file}")
-        with open(args.input_file, 'r') as f:
+        with open(args.input_file, "r") as f:
             texts = [line.strip() for line in f]
     else:
         texts = [args.text]
-    
+
     results = run_inference(
         model_path=args.model_path,
         texts=texts,
     )
-    
+
     for text, result in zip(texts, results):
         print(f"Input: {text}")
         print(f"Output: {result}")
-    
+
     logger.info("Inference completed.")
 
 
@@ -90,10 +91,10 @@ def generate_data(args):
     """Generate synthetic training data."""
     logger.info("Generating synthetic data...")
     logger.info(f"Output directory: {args.output_dir}")
-    
+
     # Import here to avoid loading modules unnecessarily
     from src.data_generator import generate_dataset
-    
+
     generate_dataset(
         num_examples=args.num_examples,
         output_dir=args.output_dir,
@@ -105,10 +106,13 @@ def generate_data(args):
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="A sequence-to-sequence model that converts verbal monetary expressions to JSON."
+        description=(
+            "A sequence-to-sequence model that converts verbal monetary "
+            "expressions to JSON."
+        )
     )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
-    
+
     # Train parser
     train_parser = subparsers.add_parser("train", help="Train the model")
     train_parser.add_argument(
@@ -122,7 +126,7 @@ def main():
         action="store_true",
         help="Disable Weights & Biases logging",
     )
-    
+
     # Evaluate parser
     eval_parser = subparsers.add_parser("evaluate", help="Evaluate the model")
     eval_parser.add_argument(
@@ -143,7 +147,7 @@ def main():
         default=str(config.ROOT_DIR / "eval_results"),
         help="Directory to save evaluation results",
     )
-    
+
     # Inference parser
     infer_parser = subparsers.add_parser("infer", help="Run inference")
     infer_parser.add_argument(
@@ -163,7 +167,7 @@ def main():
         type=str,
         help="Path to file containing input texts (one per line)",
     )
-    
+
     # Data generation parser
     data_parser = subparsers.add_parser("generate-data", help="Generate synthetic data")
     data_parser.add_argument(
@@ -184,9 +188,9 @@ def main():
         default=0.8,
         help="Ratio of examples to use for training (vs validation)",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.command == "train":
         train(args)
     elif args.command == "evaluate":

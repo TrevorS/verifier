@@ -1,6 +1,7 @@
 """
 Configuration settings for the monetary expressions to JSON converter model.
 """
+
 import os
 from pathlib import Path
 
@@ -45,4 +46,4 @@ NUM_BEAMS = 1  # Greedy decoding
 # Logging
 WANDB_PROJECT = "monetary-expressions-to-json"
 WANDB_ENTITY = None  # Set to your wandb username or team name
-LOG_LEVEL = "INFO" 
+LOG_LEVEL = "INFO"

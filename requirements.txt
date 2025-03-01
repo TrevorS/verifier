@@ -7,4 +7,6 @@ pandas==2.1.4
 tqdm==4.66.1
 wandb==0.16.2
 python-Levenshtein==0.23.0
-inflect==7.0.0 
+inflect==7.0.0
+pytest==8.3.4
+ruff==0.4.11 

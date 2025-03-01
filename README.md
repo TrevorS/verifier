@@ -39,6 +39,47 @@ uv pip install -r requirements.txt
 
 ## Usage
 
+### Using Make Commands
+
+The project includes a Makefile with convenient commands for common tasks:
+
+```bash
+# Run all tests
+make test
+
+# Run tests with verbose output
+make test-verbose
+
+# Check code quality with ruff
+make lint
+
+# Fix linting issues automatically
+make lint-fix
+
+# Format code with ruff
+make format
+
+# Run all checks (lint, format, test)
+make all
+
+# Generate synthetic training data
+make generate-data
+
+# Train the model
+make train
+
+# Evaluate the model
+make evaluate
+
+# Run inference with the model
+make inference
+
+# Clean temporary files
+make clean
+```
+
+Use `make help` to see all available commands.
+
 ### Generating Synthetic Data
 
 Generate synthetic training and validation data:

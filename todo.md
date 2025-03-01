@@ -35,38 +35,38 @@
 
 ## 2. Number to Words Utilities
 
-- [ ] Create `src/utils.py` for utility functions
-  - [ ] Implement function to convert numbers to words using inflect
-    - [ ] Handle dollars (whole numbers)
-    - [ ] Handle cents (decimal parts)
-    - [ ] Format with "dollars" and "cents"
-    - [ ] Support variations (with/without "and")
+- [x] Create `src/utils.py` for utility functions
+  - [x] Implement function to convert numbers to words using inflect
+    - [x] Handle dollars (whole numbers)
+    - [x] Handle cents (decimal parts)
+    - [x] Format with "dollars" and "cents"
+    - [x] Support variations (with/without "and")
   
-  - [ ] Implement text normalization functions
-    - [ ] Convert text to lowercase
-    - [ ] Normalize whitespace
-    - [ ] Standardize formatting
+  - [x] Implement text normalization functions
+    - [x] Convert text to lowercase
+    - [x] Normalize whitespace
+    - [x] Standardize formatting
 
-  - [ ] Implement JSON formatting functions
-    - [ ] Create JSON with amount field
-    - [ ] Ensure amount has two decimal places
-    - [ ] Format JSON strings consistently
+  - [x] Implement JSON formatting functions
+    - [x] Create JSON with amount field
+    - [x] Ensure amount has two decimal places
+    - [x] Format JSON strings consistently
 
-- [ ] Create unit tests for utility functions
-  - [ ] Test number to words conversion
-    - [ ] Test with whole dollar amounts
-    - [ ] Test with cents only
-    - [ ] Test with dollars and cents
-    - [ ] Test with zero cents
-    - [ ] Test with large numbers
+- [x] Create unit tests for utility functions
+  - [x] Test number to words conversion
+    - [x] Test with whole dollar amounts
+    - [x] Test with cents only
+    - [x] Test with dollars and cents
+    - [x] Test with zero cents
+    - [x] Test with large numbers
   
-  - [ ] Test text normalization
-    - [ ] Test lowercase conversion
-    - [ ] Test whitespace normalization
+  - [x] Test text normalization
+    - [x] Test lowercase conversion
+    - [x] Test whitespace normalization
   
-  - [ ] Test JSON formatting
-    - [ ] Test proper decimal formatting
-    - [ ] Test structural correctness
+  - [x] Test JSON formatting
+    - [x] Test proper decimal formatting
+    - [x] Test structural correctness
 
 ## 3. Synthetic Data Generation
 
