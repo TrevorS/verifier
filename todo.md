@@ -2,36 +2,36 @@
 
 ## 1. Project Setup and Environment
 
-- [ ] Create project directory structure
-  - [ ] Create `main.py` (entry point)
-  - [ ] Create `data/` directory (for datasets)
-  - [ ] Create `src/` directory (for source code)
-  - [ ] Create `models/` directory (for saved models)
-  - [ ] Create `config.py` file (for configuration)
+- [x] Create project directory structure
+  - [x] Create `main.py` (entry point)
+  - [x] Create `data/` directory (for datasets)
+  - [x] Create `src/` directory (for source code)
+  - [x] Create `models/` directory (for saved models)
+  - [x] Create `config.py` file (for configuration)
 
-- [ ] Set up configuration in `config.py`
-  - [ ] Define model parameters (FLAN-T5-Small)
-  - [ ] Define training parameters (batch size, learning rate, epochs, etc.)
-  - [ ] Define paths for data and model saving
-  - [ ] Configure logging parameters
-  - [ ] Set random seeds for reproducibility
+- [x] Set up configuration in `config.py`
+  - [x] Define model parameters (FLAN-T5-Small)
+  - [x] Define training parameters (batch size, learning rate, epochs, etc.)
+  - [x] Define paths for data and model saving
+  - [x] Configure logging parameters
+  - [x] Set random seeds for reproducibility
 
-- [ ] Set up main execution script in `main.py`
-  - [ ] Implement HuggingFace argument parsing
-  - [ ] Configure basic logging
-  - [ ] Define command modes (train, evaluate, infer)
-  - [ ] Add argument validation
-  - [ ] Set up main execution flow
+- [x] Set up main execution script in `main.py`
+  - [x] Implement HuggingFace argument parsing
+  - [x] Configure basic logging
+  - [x] Define command modes (train, evaluate, infer)
+  - [x] Add argument validation
+  - [x] Set up main execution flow
 
-- [ ] Create environment setup files
-  - [ ] Create `requirements.txt` with all dependencies
-  - [ ] Document Python 3.12 requirement
-  - [ ] Add installation instructions for uv
-  - [ ] Create `.gitignore` file
+- [x] Create environment setup files
+  - [x] Create `requirements.txt` with all dependencies
+  - [x] Document Python 3.12 requirement
+  - [x] Add installation instructions for uv
+  - [x] Create `.gitignore` file
 
-- [ ] Configure Weights & Biases integration
-  - [ ] Set up project initialization
-  - [ ] Configure default logging parameters
+- [x] Configure Weights & Biases integration
+  - [x] Set up project initialization
+  - [x] Configure default logging parameters
 
 ## 2. Number to Words Utilities
 
