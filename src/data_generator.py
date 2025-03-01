@@ -19,17 +19,24 @@ def generate_random_amount(min_amount=0.01, max_amount=1000000.00):
     Generate a random monetary amount within the specified range.
 
     Args:
-        min_amount (float): Minimum amount (inclusive)
-        max_amount (float): Maximum amount (inclusive)
+        min_amount (float): Minimum amount (inclusive, must be positive)
+        max_amount (float): Maximum amount (inclusive, must be positive)
 
     Returns:
-        float: A random monetary amount
+        float: A random positive monetary amount
+
+    Raises:
+        ValueError: If min_amount or max_amount is not positive
     """
+    # Validate that parameters are positive
+    if min_amount <= 0:
+        raise ValueError("min_amount must be positive (> 0)")
+
+    if max_amount <= 0:
+        raise ValueError("max_amount must be positive (> 0)")
+
     # Generate amount using log-uniform distribution to ensure good coverage
     # across orders of magnitude (e.g., cents, dollars, thousands, etc.)
-    if min_amount <= 0:
-        min_amount = 0.01  # Ensure positive values for log distribution
-
     log_min = np.log10(min_amount)
     log_max = np.log10(max_amount)
 
@@ -94,14 +101,21 @@ def amount_to_verbal_expression(amount, variation_type=None):
     Convert a numerical monetary amount to a verbal expression with variations.
 
     Args:
-        amount (float): Monetary amount
+        amount (float): Monetary amount (must be non-negative)
         variation_type (str, optional): Type of variation to generate
             ('standard', 'with_cents', 'cents_only', 'no_and', 'dollars_only')
             If None, a random variation will be chosen.
 
     Returns:
         str: Verbal expression of the monetary amount
+
+    Raises:
+        ValueError: If amount is negative
     """
+    # Validate that amount is non-negative
+    if amount < 0:
+        raise ValueError("amount must be non-negative (>= 0)")
+
     dollars = int(amount)
     cents = int(round((amount - dollars) * 100))
 

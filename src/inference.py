@@ -265,17 +265,20 @@ def demo_inference(model_path: str):
     """
     examples = [
         "twenty three dollars and forty five cents",
-        "one hundred euros",
-        "$1,234.56",
-        "five thousand yen",
-        "£10.50",
-        "zero dollars",
-        "negative twenty euros",
+        "one hundred dollars",
+        "five thousand dollars",
+        "seven dollars and fifty cents",
+        "twenty five dollars and thirty five cents",
+        "one thousand two hundred thirty four dollars and fifty six cents",
+        "ten dollars",
+        "fifty cents",
+        "one hundred and fifty dollars",
+        "twelve dollars and twenty five cents",
     ]
 
     print("\n===== INFERENCE DEMO =====")
     print(f"Using model from: {model_path}")
-    print("Running inference on example inputs...\n")
+    print("Running inference on example inputs (bank check style verbal amounts in USD)...\n")
 
     for example in examples:
         print(f"Input: {example}")

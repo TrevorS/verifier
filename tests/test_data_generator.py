@@ -30,9 +30,13 @@ class TestGenerateRandomAmount:
             assert abs(amount - round(amount, 2)) < 1e-10
 
     def test_negative_min_amount_handling(self):
-        # Test that negative min_amount is handled correctly
-        amount = generate_random_amount(-10.0, 100.0)
-        assert amount >= 0.01
+        # Test that negative min_amount raises ValueError
+        with pytest.raises(ValueError, match="min_amount must be positive"):
+            generate_random_amount(-10.0, 100.0)
+
+        # Test that negative max_amount raises ValueError
+        with pytest.raises(ValueError, match="max_amount must be positive"):
+            generate_random_amount(10.0, -100.0)
 
 
 class TestGenerateStratifiedAmounts:
@@ -73,14 +77,23 @@ class TestAmountToVerbalExpression:
             (0.75, "cents_only", "seventy-five cents"),
             (100.01, "no_and", "one hundred dollars one cent"),
             (42.00, "with_cents", "forty-two dollars and zero cents"),
+            (1234.56, "standard", "one thousand, two hundred and thirty-four dollars and fifty-six cents"),
+            (10000.00, "dollars_only", "ten thousand dollars"),
+            (1.25, "standard", "one dollar and twenty-five cents"),
+            (100.50, "standard", "one hundred dollars and fifty cents"),
         ],
     )
     def test_variation_types(self, amount, variation, expected_substr):
         result = amount_to_verbal_expression(amount, variation_type=variation)
         assert expected_substr in result
 
+    def test_negative_amount_handling(self):
+        # Negative amounts should raise ValueError
+        with pytest.raises(ValueError):
+            amount_to_verbal_expression(-25.10)
+
     def test_random_variation(self):
-        # Test that random variation selection works
+        # Test that random variation selection works with a positive USD amount
         amount = 25.10
         # Call multiple times to cover different random variations
         variations = set()

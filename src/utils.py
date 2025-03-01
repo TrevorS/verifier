@@ -29,19 +29,19 @@ def normalize_text(text):
 
 def format_json(amount):
     """
-    Format a numeric amount as a JSON string.
+    Format a numeric amount as a JSON string with USD currency.
 
     Args:
         amount (float): Monetary amount
 
     Returns:
-        str: JSON string representation
+        str: JSON string representation with USD currency
     """
     # Ensure amount has two decimal places
     formatted_amount = float(format(amount, ".2f"))
 
-    # Create JSON object
-    json_obj = {"amount": formatted_amount}
+    # Create JSON object with USD currency
+    json_obj = {"amount": formatted_amount, "currency": "USD"}
 
     # Convert to JSON string
     return json.dumps(json_obj)
@@ -52,12 +52,19 @@ def number_to_words(amount, include_and=True):
     Convert a numerical monetary amount to a verbal expression.
 
     Args:
-        amount (float): Monetary amount
+        amount (float): Monetary amount (must be non-negative)
         include_and (bool): Whether to include 'and' between dollars and cents
 
     Returns:
         str: Verbal expression of the monetary amount
+
+    Raises:
+        ValueError: If amount is negative
     """
+    # Validate that amount is non-negative
+    if amount < 0:
+        raise ValueError("amount must be non-negative (>= 0)")
+
     p = inflect.engine()
 
     # Split amount into dollars (whole number) and cents (decimals)
