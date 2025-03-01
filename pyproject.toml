@@ -1,0 +1,18 @@
+[project]
+name = "verifier"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=3.3.2",
+    "evaluate>=0.4.3",
+    "inflect>=7.5.0",
+    "numpy>=2.2.3",
+    "pandas>=2.2.3",
+    "python-levenshtein>=0.26.1",
+    "torch>=2.6.0",
+    "tqdm>=4.67.1",
+    "transformers>=4.49.0",
+    "wandb>=0.19.7",
+]
