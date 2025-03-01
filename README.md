@@ -102,26 +102,55 @@ To disable Weights & Biases logging:
 python main.py train --no-wandb
 ```
 
+### Running Inference
+
+Run inference with a trained model:
+
+```bash
+# Single input
+python main.py infer --model-path models/checkpoint --text "twenty-five dollars"
+
+# Input from file (one expression per line)
+python main.py infer --model-path models/checkpoint --input-file inputs.txt
+
+# Demo mode with example inputs
+python main.py infer --model-path models/checkpoint --demo
+```
+
+Using the Makefile:
+
+```bash
+# Single input
+make inference MODEL_PATH=models/checkpoint TEXT="twenty-five dollars"
+
+# Input from file
+make inference MODEL_PATH=models/checkpoint INPUT_FILE=inputs.txt
+
+# Demo mode
+make inference-demo MODEL_PATH=models/checkpoint
+```
+
+The inference pipeline outputs:
+- JSON representation of the monetary expression
+- Validation status
+- Parsed numerical amount
+- Currency information (if available)
+
+Example output:
+```
+Input: twenty-five dollars and ten cents
+Output JSON: {"amount": 25.10, "currency": "USD"}
+✅ Valid JSON
+Amount: 25.1
+Currency: USD
+```
+
 ### Evaluation
 
 Evaluate the model on the test set:
 
 ```bash
 python main.py evaluate --model-path models/checkpoints/best
-```
-
-### Inference
-
-Run inference on a single expression:
-
-```bash
-python main.py infer --model-path models/checkpoints/best --text "twenty-five dollars and ten cents"
-```
-
-Or process multiple expressions from a file:
-
-```bash
-python main.py infer --model-path models/checkpoints/best --input-file examples.txt
 ```
 
 ## Implementation Details

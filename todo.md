@@ -279,49 +279,45 @@
 
 ## 8. Inference Pipeline
 
-- [ ] Create `src/inference.py` for inference
-  - [ ] Implement input preparation function
-    - [ ] Clean and normalize text
-    - [ ] Tokenize the input
-    - [ ] Handle batch inputs
-    - [ ] Validate input format
+- [x] Create `src/inference.py` for inference
+  - [x] Implement input preparation function
+    - [x] Clean and normalize text
+    - [x] Tokenize the input
+    - [x] Handle batch inputs
+    - [x] Validate input format
 
-  - [ ] Implement model inference function
-    - [ ] Configure greedy decoding
-    - [ ] Generate predictions
-    - [ ] Decode tokens to text
-    - [ ] Handle generation errors
+  - [x] Implement model inference function
+    - [x] Configure greedy decoding
+    - [x] Generate predictions
+    - [x] Decode tokens to text
+    - [x] Handle generation errors
 
-  - [ ] Implement output post-processing
-    - [ ] Extract JSON from output
-    - [ ] Validate JSON structure
-    - [ ] Parse amount value
-    - [ ] Handle malformed JSON
-    - [ ] Format final output
+  - [x] Implement output post-processing
+    - [x] Extract JSON from output
+    - [x] Validate JSON structure
+    - [x] Parse amount value
+    - [x] Handle malformed JSON
+    - [x] Format final output
 
-  - [ ] Implement complete inference pipeline
-    - [ ] Process input through all steps
-    - [ ] Return validated JSON or error
-    - [ ] Include parsed amount
-    - [ ] Add confidence information
+  - [x] Create demo script with examples
+    - [x] Include varied test cases
+    - [x] Show complete execution
+    - [x] Display formatted results
+    - [x] Demonstrate error handling
 
-  - [ ] Create demo script with examples
-    - [ ] Include varied test cases
-    - [ ] Show complete execution
-    - [ ] Display formatted results
-    - [ ] Demonstrate error handling
+  - [x] Update main.py with inference mode
+    - [x] Add command-line interface
+    - [x] Process input arguments
+    - [x] Call inference pipeline
+    - [x] Format and display results
 
-- [ ] Update main.py with inference mode
-  - [ ] Add inference command
-  - [ ] Configure inference parameters
-  - [ ] Add argument parsing
-  - [ ] Implement inference workflow
+  - [x] Create CLI interface for testing
+    - [x] Add input text option
+    - [x] Add input file option
+    - [x] Add demo mode option
+    - [x] Process and display results
 
-- [ ] Create CLI interface for testing
-  - [ ] Accept custom inputs
-  - [ ] Display formatted results
-  - [ ] Allow batch processing
-  - [ ] Provide help documentation
+  - [x] Implement complete inference pipeline
 
 ## 9. Documentation and Final Review
 

@@ -109,23 +109,53 @@ def infer(args):
     logger.info(f"Model path: {args.model_path}")
 
     # Import here to avoid loading modules unnecessarily
-    from src.inference import run_inference
+    from src.inference import demo_inference, inference_pipeline
+
+    if args.demo:
+        # Run the demo with example inputs
+        logger.info("Running demo with example inputs")
+        demo_inference(args.model_path)
+        return
 
     if args.input_file:
         logger.info(f"Input file: {args.input_file}")
         with open(args.input_file, "r") as f:
-            texts = [line.strip() for line in f]
+            texts = [line.strip() for line in f if line.strip()]
+
+        logger.info(f"Processing {len(texts)} inputs from file")
+        # Process each input
+        for text in texts:
+            json_str, json_obj, is_valid, amount = inference_pipeline(text=text, model_path=args.model_path)
+
+            print("\n" + "-" * 50)
+            print(f"Input: {text}")
+            print(f"Output JSON: {json_str}")
+
+            if is_valid:
+                print("✅ Valid JSON")
+                print(f"Amount: {amount}")
+                if json_obj and json_obj.get("currency"):
+                    print(f"Currency: {json_obj['currency']}")
+            else:
+                print("❌ Invalid JSON output")
     else:
-        texts = [args.text]
+        # Process single input
+        text = args.text
+        logger.info(f"Processing input: {text}")
 
-    results = run_inference(
-        model_path=args.model_path,
-        texts=texts,
-    )
+        json_str, json_obj, is_valid, amount = inference_pipeline(text=text, model_path=args.model_path)
 
-    for text, result in zip(texts, results):
+        print("\n" + "-" * 50)
         print(f"Input: {text}")
-        print(f"Output: {result}")
+        print(f"Output JSON: {json_str}")
+
+        if is_valid:
+            print("✅ Valid JSON")
+            print(f"Amount: {amount}")
+            if json_obj and json_obj.get("currency"):
+                print(f"Currency: {json_obj['currency']}")
+        else:
+            print("❌ Invalid JSON output")
 
     logger.info("Inference completed.")
 
@@ -233,6 +263,11 @@ def main():
         "--input-file",
         type=str,
         help="Path to file containing input texts (one per line)",
+    )
+    infer_parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run the demo with example inputs",
     )
 
     # Data generation parser
