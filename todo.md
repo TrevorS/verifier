@@ -70,41 +70,41 @@
 
 ## 3. Synthetic Data Generation
 
-- [ ] Create `src/data_generator.py` for data generation
-  - [ ] Implement function to generate random monetary amounts
-    - [ ] Generate random dollar amounts
-    - [ ] Generate random cent amounts
-    - [ ] Ensure diverse range coverage
-    - [ ] Control distribution across magnitudes
+- [x] Create `src/data_generator.py` for data generation
+  - [x] Implement function to generate random monetary amounts
+    - [x] Generate random dollar amounts
+    - [x] Generate random cent amounts
+    - [x] Ensure diverse range coverage
+    - [x] Control distribution across magnitudes
 
-  - [ ] Implement function to create verbal expressions
-    - [ ] Use number-to-words function from utils.py
-    - [ ] Generate format variations:
-      - [ ] With/without "and"
-      - [ ] With/without "zero cents"
-      - [ ] Just cents for amounts < $1
-      - [ ] Different ways to express the same amount
+  - [x] Implement function to create verbal expressions
+    - [x] Use number-to-words function from utils.py
+    - [x] Generate format variations:
+      - [x] With/without "and"
+      - [x] With/without "zero cents"
+      - [x] Just cents for amounts < $1
+      - [x] Different ways to express the same amount
 
-  - [ ] Implement function to create target JSON output
-    - [ ] Format as `{"amount": 25.10}`
-    - [ ] Ensure consistent decimal places
+  - [x] Implement function to create target JSON output
+    - [x] Format as `{"amount": 25.10}`
+    - [x] Ensure consistent decimal places
 
-  - [ ] Implement dataset generation function
-    - [ ] Generate specified number of examples
-    - [ ] Ensure diverse amount ranges
-    - [ ] Split into training, validation, and test sets
-    - [ ] Save as JSONL files
+  - [x] Implement dataset generation function
+    - [x] Generate specified number of examples
+    - [x] Ensure diverse amount ranges
+    - [x] Split into training, validation, and test sets
+    - [x] Save as JSONL files
 
-  - [ ] Implement data augmentation functions
-    - [ ] Random character dropout
-    - [ ] Add noise that doesn't change meaning
-    - [ ] Apply augmentation to a portion of the dataset
+  - [x] Implement data augmentation functions
+    - [x] Random character dropout
+    - [x] Add noise that doesn't change meaning
+    - [x] Apply augmentation to a portion of the dataset
 
-- [ ] Create scripts to generate and verify datasets
-  - [ ] Create script to generate full training dataset
-  - [ ] Create script to generate evaluation dataset
-  - [ ] Add data quality verification
-  - [ ] Generate sample sets for testing
+- [x] Create scripts to generate and verify datasets
+  - [x] Create script to generate full training dataset
+  - [x] Create script to generate evaluation dataset
+  - [x] Add data quality verification
+  - [x] Generate sample sets for testing
 
 ## 4. Dataset Preparation with HF Datasets
 
