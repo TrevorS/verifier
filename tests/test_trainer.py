@@ -104,9 +104,7 @@ def test_configure_training_args():
         assert args.learning_rate == config.LEARNING_RATE
 
         # Test with custom arguments
-        custom_args = configure_training_args(
-            temp_dir, num_train_epochs=5, batch_size=32, learning_rate=5e-5, early_stopping_patience=2
-        )
+        custom_args = configure_training_args(temp_dir, num_train_epochs=5, batch_size=32, learning_rate=5e-5, early_stopping_patience=2)
 
         assert custom_args.num_train_epochs == 5
         assert custom_args.per_device_train_batch_size == 32

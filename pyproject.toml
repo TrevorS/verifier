@@ -9,6 +9,7 @@ dependencies = [
     "datasets>=3.3.2",
     "evaluate>=0.4.3",
     "inflect>=7.5.0",
+    "matplotlib>=3.10.1",
     "numpy>=2.2.3",
     "pandas>=2.2.3",
     "pytest>=8.3.4",
@@ -22,8 +23,7 @@ dependencies = [
 ]
 
 [tool.ruff]
-# Same as Black.
-line-length = 120
+line-length = 150
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`), isort (`I`), and other default rules

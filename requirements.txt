@@ -4,9 +4,10 @@ evaluate==0.4.1
 torch==2.1.2
 numpy==1.26.3
 pandas==2.1.4
-tqdm==4.66.1
+tqdm==4.66.7
 wandb==0.16.2
 python-Levenshtein==0.23.0
 inflect==7.0.0
 pytest==8.3.4
-ruff==0.4.11 
+ruff==0.4.11
+matplotlib==3.8.2 

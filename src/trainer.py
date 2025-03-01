@@ -444,9 +444,7 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
         ).input_ids.to(device)
 
         # Generate prediction
-        output_ids = model.generate(
-            input_ids, max_length=config.MAX_TARGET_LENGTH, num_beams=config.NUM_BEAMS, early_stopping=True
-        )
+        output_ids = model.generate(input_ids, max_length=config.MAX_TARGET_LENGTH, num_beams=config.NUM_BEAMS, early_stopping=True)
 
         # Decode prediction
         prediction = tokenizer.decode(output_ids[0], skip_special_tokens=True)

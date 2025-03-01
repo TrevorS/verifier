@@ -162,9 +162,7 @@ class TestGenerateDataset:
             train_ratio = 0.8
 
             # Generate dataset
-            train_path, val_path = generate_dataset(
-                num_examples=num_examples, output_dir=temp_dir, train_ratio=train_ratio
-            )
+            train_path, val_path = generate_dataset(num_examples=num_examples, output_dir=temp_dir, train_ratio=train_ratio)
 
             # Check paths
             assert train_path.exists()

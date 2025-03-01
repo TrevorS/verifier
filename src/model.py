@@ -18,9 +18,7 @@ import config
 logger = logging.getLogger(__name__)
 
 
-def initialize_model(
-    model_name: Optional[str] = None, device: Optional[Union[str, torch.device]] = None
-) -> T5ForConditionalGeneration:
+def initialize_model(model_name: Optional[str] = None, device: Optional[Union[str, torch.device]] = None) -> T5ForConditionalGeneration:
     """
     Initialize the FLAN-T5-Small model for sequence-to-sequence generation.
 

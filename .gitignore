@@ -70,3 +70,4 @@ wheels/
 *.egg
 tests/models
 .coverage*
+eval_results/
