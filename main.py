@@ -26,21 +26,64 @@ logger = logging.getLogger(__name__)
 def train(args):
     """Train the model."""
     logger.info("Starting training...")
-    logger.info(f"Using model: {config.MODEL_NAME}")
-    logger.info(f"Training data: {config.TRAIN_DATA_PATH}")
-    logger.info(f"Validation data: {config.VAL_DATA_PATH}")
+    logger.info(f"Using model: {args.model_name}")
+
+    # Determine data paths based on whether we're using a small subset for testing
+    train_data_path = args.train_data_path
+    val_data_path = args.val_data_path
+
+    if args.test_run:
+        logger.info("Running with a small subset of data for testing")
+        # Import necessary modules
+        import json
+
+        from src.dataset import load_dataset
+
+        # Create temp directory if it doesn't exist
+        temp_dir = Path(config.ROOT_DIR) / "temp"
+        temp_dir.mkdir(exist_ok=True)
+
+        # Load original datasets
+        train_dataset = load_dataset(train_data_path)["train"]
+        val_dataset = load_dataset(val_data_path)["validation"]
+
+        # Select a small subset (e.g., 100 examples for training, 20 for validation)
+        train_subset = train_dataset.select(range(min(100, len(train_dataset))))
+        val_subset = val_dataset.select(range(min(20, len(val_dataset))))
+
+        # Define temporary file paths
+        train_data_path = temp_dir / "train_subset.jsonl"
+        val_data_path = temp_dir / "val_subset.jsonl"
+
+        # Save subsets as JSONL
+        with open(train_data_path, "w") as f:
+            for item in train_subset:
+                f.write(json.dumps(item) + "\n")
+
+        with open(val_data_path, "w") as f:
+            for item in val_subset:
+                f.write(json.dumps(item) + "\n")
+
+        logger.info(f"Created temporary training data: {train_data_path} ({len(train_subset)} examples)")
+        logger.info(f"Created temporary validation data: {val_data_path} ({len(val_subset)} examples)")
+    else:
+        logger.info(f"Training data: {train_data_path}")
+        logger.info(f"Validation data: {val_data_path}")
 
     # Import here to avoid loading modules unnecessarily
     from src.trainer import train_model
 
-    train_model(
-        model_name=config.MODEL_NAME,
-        train_data_path=config.TRAIN_DATA_PATH,
-        val_data_path=config.VAL_DATA_PATH,
+    best_model_path = train_model(
+        model_name=args.model_name,
+        train_data_path=train_data_path,
+        val_data_path=val_data_path,
         output_dir=args.output_dir,
         wandb_logging=not args.no_wandb,
+        early_stopping_patience=args.early_stopping_patience,
     )
-    logger.info("Training completed.")
+    logger.info(f"Training completed. Best model saved at: {best_model_path}")
+
+    return best_model_path
 
 
 def evaluate(args):
@@ -113,6 +156,24 @@ def main():
     # Train parser
     train_parser = subparsers.add_parser("train", help="Train the model")
     train_parser.add_argument(
+        "--model-name",
+        type=str,
+        default=config.MODEL_NAME,
+        help="Name of the pretrained model to fine-tune",
+    )
+    train_parser.add_argument(
+        "--train-data-path",
+        type=str,
+        default=str(config.TRAIN_DATA_PATH),
+        help="Path to the training data",
+    )
+    train_parser.add_argument(
+        "--val-data-path",
+        type=str,
+        default=str(config.VAL_DATA_PATH),
+        help="Path to the validation data",
+    )
+    train_parser.add_argument(
         "--output-dir",
         type=str,
         default=str(config.MODELS_DIR / "checkpoints"),
@@ -122,6 +183,17 @@ def main():
         "--no-wandb",
         action="store_true",
         help="Disable Weights & Biases logging",
+    )
+    train_parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=3,
+        help="Number of evaluations with no improvement after which to stop training",
+    )
+    train_parser.add_argument(
+        "--test-run",
+        action="store_true",
+        help="Run with a small subset of data to test the pipeline end-to-end",
     )
 
     # Evaluate parser

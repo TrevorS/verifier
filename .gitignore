@@ -69,3 +69,4 @@ wheels/
 .installed.cfg
 *.egg
 tests/models
+.coverage*

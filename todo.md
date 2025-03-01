@@ -183,52 +183,52 @@
 
 ## 6. Training Pipeline with HF Trainer
 
-- [ ] Create `src/trainer.py` for training pipeline
-  - [ ] Implement training arguments configuration
-    - [ ] Set up Seq2SeqTrainingArguments
-    - [ ] Configure learning rate and schedule
-    - [ ] Set batch size
-    - [ ] Configure evaluation strategy
-    - [ ] Set up checkpoint saving
-    - [ ] Enable W&B logging
-    - [ ] Configure early stopping
+- [x] Create `src/trainer.py` for training pipeline
+  - [x] Implement training arguments configuration
+    - [x] Set up Seq2SeqTrainingArguments
+    - [x] Configure learning rate and schedule
+    - [x] Set batch size
+    - [x] Configure evaluation strategy
+    - [x] Set up checkpoint saving
+    - [x] Enable W&B logging
+    - [x] Configure early stopping
 
-  - [ ] Implement Seq2SeqTrainer setup
-    - [ ] Initialize with model and datasets
-    - [ ] Configure data collator
-    - [ ] Set up compute_metrics function
-    - [ ] Connect with W&B tracking
+  - [x] Implement Seq2SeqTrainer setup
+    - [x] Initialize with model and datasets
+    - [x] Configure data collator
+    - [x] Set up compute_metrics function
+    - [x] Connect with W&B tracking
 
-  - [ ] Implement custom evaluation metrics
-    - [ ] Exact match accuracy
-    - [ ] Levenshtein distance
-    - [ ] JSON validity check
-    - [ ] Numeric difference calculation
+  - [x] Implement custom evaluation metrics
+    - [x] Exact match accuracy
+    - [x] Levenshtein distance
+    - [x] JSON validity check
+    - [x] Numeric difference calculation
 
-  - [ ] Implement training execution function
-    - [ ] Initialize W&B run
-    - [ ] Train the model
-    - [ ] Evaluate on validation
-    - [ ] Save best checkpoint
-    - [ ] Handle training interruptions
+  - [x] Implement training execution function
+    - [x] Initialize W&B run
+    - [x] Train the model
+    - [x] Evaluate on validation
+    - [x] Save best checkpoint
+    - [x] Handle training interruptions
 
-  - [ ] Implement training report generation
-    - [ ] Log final metrics
-    - [ ] Save example predictions
-    - [ ] Generate training summary
-    - [ ] Create visualizations
+  - [x] Implement training report generation
+    - [x] Log final metrics
+    - [x] Save example predictions
+    - [x] Generate training summary
+    - [x] Create visualizations
 
-- [ ] Update main.py with training mode
-  - [ ] Add training command
-  - [ ] Configure training parameters
-  - [ ] Add argument parsing for training
-  - [ ] Implement training workflow
+- [x] Update main.py with training mode
+  - [x] Add training command
+  - [x] Configure training parameters
+  - [x] Add argument parsing for training
+  - [x] Implement training workflow
 
-- [ ] Create test script for training pipeline
-  - [ ] Test with small dataset
-  - [ ] Verify metrics calculation
-  - [ ] Check checkpoint saving
-  - [ ] Test W&B integration
+- [x] Create test script for training pipeline
+  - [x] Test with small dataset
+  - [x] Verify metrics calculation
+  - [x] Check checkpoint saving
+  - [x] Test W&B integration
 
 ## 7. Evaluation and Error Analysis
 
