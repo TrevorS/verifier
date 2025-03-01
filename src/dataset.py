@@ -44,9 +44,7 @@ def configure_tokenizer(model_name):
     return tokenizer
 
 
-def preprocess_dataset(
-    dataset, tokenizer, max_input_length=None, max_target_length=None
-):
+def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_length=None):
     """
     Preprocess the dataset by tokenizing inputs and targets.
 
@@ -106,9 +104,7 @@ def preprocess_dataset(
     return preprocessed_dataset
 
 
-def prepare_dataset(
-    train_path, val_path, model_name, max_input_length=None, max_target_length=None
-):
+def prepare_dataset(train_path, val_path, model_name, max_input_length=None, max_target_length=None):
     """
     Prepare the complete dataset for training.
 

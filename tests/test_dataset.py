@@ -114,9 +114,7 @@ def test_prepare_dataset(sample_data):
     train_path, val_path = sample_data
 
     # Test the full pipeline
-    dataset, tokenizer, data_collator = prepare_dataset(
-        train_path, val_path, config.MODEL_NAME
-    )
+    dataset, tokenizer, data_collator = prepare_dataset(train_path, val_path, config.MODEL_NAME)
 
     # Verify we got all components
     assert dataset is not None
@@ -153,6 +151,4 @@ def test_dataset_performance(sample_data):
     process_time = time.time() - start_time
 
     # Batched processing should be reasonably fast
-    assert process_time < 5.0, (
-        f"Dataset preprocessing took too long: {process_time:.2f}s"
-    )
+    assert process_time < 5.0, f"Dataset preprocessing took too long: {process_time:.2f}s"

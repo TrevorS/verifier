@@ -140,9 +140,7 @@ def compute_metrics(eval_preds):
     exact_match = evaluate.load("exact_match")
 
     # Calculate metrics
-    exact_match_score = exact_match.compute(
-        predictions=decoded_preds, references=decoded_labels
-    )
+    exact_match_score = exact_match.compute(predictions=decoded_preds, references=decoded_labels)
 
     # Check JSON validity and extract amounts for numeric difference
     valid_json_count = 0
@@ -179,9 +177,7 @@ def compute_metrics(eval_preds):
     }
 
 
-def setup_trainer(
-    model, tokenizer, train_dataset, eval_dataset, data_collator, output_dir
-):
+def setup_trainer(model, tokenizer, train_dataset, eval_dataset, data_collator, output_dir):
     """
     Set up the Seq2SeqTrainer for fine-tuning.
 

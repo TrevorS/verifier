@@ -106,10 +106,7 @@ def generate_data(args):
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description=(
-            "A sequence-to-sequence model that converts verbal monetary "
-            "expressions to JSON."
-        )
+        description=("A sequence-to-sequence model that converts verbal monetary expressions to JSON.")
     )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 

@@ -86,9 +86,7 @@ def run_inference(model_path, texts):
         if valid_json:
             logger.info(f"Successfully processed: {text} -> {output_text}")
         else:
-            logger.warning(
-                f"Failed to generate valid JSON for: {text} -> {output_text}"
-            )
+            logger.warning(f"Failed to generate valid JSON for: {text} -> {output_text}")
 
         # Add to results
         results.append(output_text)

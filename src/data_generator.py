@@ -318,10 +318,7 @@ def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
         for example in val_examples:
             f.write(json.dumps(example) + "\n")
 
-    print(
-        f"Generated {len(train_examples)} training examples and "
-        f"{len(val_examples)} validation examples"
-    )
+    print(f"Generated {len(train_examples)} training examples and {len(val_examples)} validation examples")
     print(f"Training data saved to: {train_path}")
     print(f"Validation data saved to: {val_path}")
 

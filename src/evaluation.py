@@ -121,16 +121,13 @@ def calculate_metrics(results):
     json_validity = valid_json / total_examples if total_examples > 0 else 0
 
     # Calculate amount differences
-    amount_diffs = [
-        result["amount_diff"] for result in results if result["amount_diff"] is not None
-    ]
+    amount_diffs = [result["amount_diff"] for result in results if result["amount_diff"] is not None]
     mean_amount_diff = np.mean(amount_diffs) if amount_diffs else float("inf")
     median_amount_diff = np.median(amount_diffs) if amount_diffs else float("inf")
 
     # Count examples with amount difference <= 0.01
     correct_amounts = sum(
-        result["amount_diff"] <= 0.01 if result["amount_diff"] is not None else False
-        for result in results
+        result["amount_diff"] <= 0.01 if result["amount_diff"] is not None else False for result in results
     )
     amount_accuracy = correct_amounts / total_examples if total_examples > 0 else 0
 

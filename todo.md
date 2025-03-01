@@ -145,41 +145,41 @@
 
 ## 5. Model Configuration with HF Transformers
 
-- [ ] Create `src/model.py` for model handling
-  - [ ] Implement function to initialize FLAN-T5
-    - [ ] Load pretrained FLAN-T5-Small
-    - [ ] Configure for sequence-to-sequence
-    - [ ] Handle device placement (CPU/GPU)
-    - [ ] Set up model configuration
+- [x] Create `src/model.py` for model handling
+  - [x] Implement function to initialize FLAN-T5
+    - [x] Load pretrained FLAN-T5-Small
+    - [x] Configure for sequence-to-sequence
+    - [x] Handle device placement (CPU/GPU)
+    - [x] Set up model configuration
 
-  - [ ] Implement model checkpoint saving
-    - [ ] Save model with metadata
-    - [ ] Include tokenizer
-    - [ ] Add configuration details
-    - [ ] Implement versioning
+  - [x] Implement model checkpoint saving
+    - [x] Save model with metadata
+    - [x] Include tokenizer
+    - [x] Add configuration details
+    - [x] Implement versioning
 
-  - [ ] Implement model loading from checkpoints
-    - [ ] Load model and tokenizer
-    - [ ] Restore configuration
-    - [ ] Verify model is ready for use
-    - [ ] Handle different checkpoint formats
+  - [x] Implement model loading from checkpoints
+    - [x] Load model and tokenizer
+    - [x] Restore configuration
+    - [x] Verify model is ready for use
+    - [x] Handle different checkpoint formats
 
-  - [ ] Implement text generation function
-    - [ ] Configure greedy decoding
-    - [ ] Generate predictions from input
-    - [ ] Convert tokens back to text
-    - [ ] Handle generation errors
+  - [x] Implement text generation function
+    - [x] Configure greedy decoding
+    - [x] Generate predictions from input
+    - [x] Convert tokens back to text
+    - [x] Handle generation errors
 
-  - [ ] Implement input preparation for inference
-    - [ ] Tokenize input text
-    - [ ] Format for model input
-    - [ ] Handle batch processing
+  - [x] Implement input preparation for inference
+    - [x] Tokenize input text
+    - [x] Format for model input
+    - [x] Handle batch processing
 
-- [ ] Create test script for model verification
-  - [ ] Test model initialization
-  - [ ] Test saving and loading
-  - [ ] Test basic inference
-  - [ ] Verify output formatting
+- [x] Create test script for model verification
+  - [x] Test model initialization
+  - [x] Test saving and loading
+  - [x] Test basic inference
+  - [x] Verify output formatting
 
 ## 6. Training Pipeline with HF Trainer
 

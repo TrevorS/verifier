@@ -119,10 +119,7 @@ class TestApplyAugmentation:
         for _ in range(num_tests):
             augmented = apply_augmentation(text)
             # We'll check if any of these key words are preserved
-            key_word_preserved = any(
-                word in augmented
-                for word in ["dollar", "cent", "twenty", "five", "ten"]
-            )
+            key_word_preserved = any(word in augmented for word in ["dollar", "cent", "twenty", "five", "ten"])
             if key_word_preserved:
                 preserved_count += 1
 
