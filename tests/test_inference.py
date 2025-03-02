@@ -24,25 +24,25 @@ class TestInputPreparation:
     def test_prepare_input(self):
         """Test that input text is properly normalized."""
         # Test basic normalization
-        assert prepare_input("TWENTY dollars") == "twenty dollars"
+        assert prepare_input("TWENTY dollars", add_instruction_prefix=False) == "twenty dollars"
 
         # Test special character removal
-        assert prepare_input("$25.50!") == "$25.50"
+        assert prepare_input("$25.50!", add_instruction_prefix=False) == "$25.50"
 
         # Test whitespace normalization
-        assert prepare_input("  five   hundred  dollars  ") == "five hundred dollars"
+        assert prepare_input("  five   hundred  dollars  ", add_instruction_prefix=False) == "five hundred dollars"
 
         # Test currency symbol preservation
-        assert prepare_input("€100") == "€100"
-        assert prepare_input("$50.25") == "$50.25"
-        assert prepare_input("£10.99") == "£10.99"
+        assert prepare_input("€100", add_instruction_prefix=False) == "€100"
+        assert prepare_input("$50.25", add_instruction_prefix=False) == "$50.25"
+        assert prepare_input("£10.99", add_instruction_prefix=False) == "£10.99"
 
     def test_prepare_batch_inputs(self):
         """Test that batch inputs are properly processed."""
         inputs = ["$20", "thirty euros", "ONE HUNDRED YEN"]
         expected = ["$20", "thirty euros", "one hundred yen"]
 
-        assert prepare_batch_inputs(inputs) == expected
+        assert prepare_batch_inputs(inputs, add_instruction_prefix=False) == expected
 
 
 class TestModelInference:

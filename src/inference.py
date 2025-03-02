@@ -13,12 +13,13 @@ from src.utils import normalize_text
 logger = logging.getLogger(__name__)
 
 
-def prepare_input(text: str) -> str:
+def prepare_input(text: str, add_instruction_prefix: bool = True) -> str:
     """
     Prepare the input text for inference by cleaning and normalizing.
 
     Args:
         text (str): Input text - verbal monetary expression
+        add_instruction_prefix (bool): Whether to add the instruction prefix
 
     Returns:
         str: Normalized text ready for inference
@@ -29,20 +30,25 @@ def prepare_input(text: str) -> str:
     # Remove any special characters that might interfere with model processing
     normalized_text = re.sub(r"[^\w\s.,\-$€£¥]", "", normalized_text)
 
+    # Add instruction prefix to match training format if requested
+    if add_instruction_prefix:
+        normalized_text = f"Convert to JSON: {normalized_text}"
+
     return normalized_text
 
 
-def prepare_batch_inputs(texts: List[str]) -> List[str]:
+def prepare_batch_inputs(texts: List[str], add_instruction_prefix: bool = True) -> List[str]:
     """
     Prepare a batch of input texts for inference.
 
     Args:
         texts (List[str]): List of input texts to process
+        add_instruction_prefix (bool): Whether to add the instruction prefix
 
     Returns:
         List[str]: List of normalized texts ready for inference
     """
-    return [prepare_input(text) for text in texts]
+    return [prepare_input(text, add_instruction_prefix) for text in texts]
 
 
 def run_model_inference(model, tokenizer, input_text: str, use_greedy_decoding: bool = True) -> str:
@@ -196,8 +202,8 @@ def inference_pipeline(text: str, model_path: str) -> Tuple[str, Optional[Dict],
     # Load model and tokenizer
     model, tokenizer, metadata = load_model(model_path)
 
-    # Prepare input
-    processed_input = prepare_input(text)
+    # Prepare input with instruction prefix
+    processed_input = prepare_input(text, add_instruction_prefix=True)
 
     # Run inference
     raw_output = run_model_inference(model, tokenizer, processed_input)
@@ -238,8 +244,8 @@ def run_inference(model_path, texts):
     # Process each input text
     results = []
     for text in texts:
-        # Prepare input
-        input_text = prepare_input(text)
+        # Prepare input with instruction prefix
+        input_text = prepare_input(text, add_instruction_prefix=True)
 
         # Generate prediction
         prediction = run_model_inference(model, tokenizer, input_text)
@@ -282,6 +288,7 @@ def demo_inference(model_path: str):
 
     for example in examples:
         print(f"Input: {example}")
+        # Using the full inference pipeline which will add the instruction prefix
         json_str, json_obj, is_valid, amount, raw_output = inference_pipeline(example, model_path)
 
         print(f"Raw model output: {raw_output}")

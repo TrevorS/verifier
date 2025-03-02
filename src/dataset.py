@@ -68,12 +68,15 @@ def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_len
         # Get the input texts
         inputs = examples["input"]
 
+        # Add instruction prefix to leverage FLAN-T5's instruction-following capabilities
+        instructions = ["Convert to JSON: " + text for text in inputs]
+
         # Get the target texts
         targets = examples["target"]
 
-        # Tokenize inputs
+        # Tokenize inputs with instruction prefix
         model_inputs = tokenizer(
-            inputs,
+            instructions,
             max_length=max_input_length,
             padding="max_length",
             truncation=True,
