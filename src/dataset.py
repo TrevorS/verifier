@@ -82,11 +82,8 @@ def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_len
             truncation=True,
         )
 
-        # Tokenize targets separately
-        # Using the modern approach to tokenize targets
-        # (instead of with the deprecated as_target_tokenizer)
         target_encoding = tokenizer(
-            targets,
+            text_target=targets,
             max_length=max_target_length,
             padding="max_length",
             truncation=True,
