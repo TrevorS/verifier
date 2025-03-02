@@ -973,12 +973,13 @@ def apply_augmentation(text, dropout_prob=0.05, case_change_prob=0.2):
     return normalize_text(text)
 
 
-def generate_examples(num_examples):
+def generate_examples(num_examples, control_variation_distribution=True):
     """
     Generate examples of verbal monetary expressions and their JSON representations.
 
     Args:
         num_examples (int): Number of examples to generate
+        control_variation_distribution (bool): Whether to manually control variation distribution
 
     Returns:
         list: List of dictionaries with input and target fields
@@ -987,28 +988,71 @@ def generate_examples(num_examples):
     amounts = generate_stratified_amounts(num_examples)
 
     examples = []
-    for amount in amounts:
-        # Generate verbal expression (with random variation)
-        verbal_expr, variation_name = amount_to_verbal_expression(amount)
 
-        # Apply augmentation to some examples
-        if random.random() < 0.3:  # Apply augmentation to 30% of examples
-            verbal_expr = apply_augmentation(verbal_expr)
-
-        # Create JSON output
-        json_output = create_json_output(amount)
-
-        # Create example
-        example = {
-            "input": verbal_expr,
-            "target": json_output,
-            # Store original amount for reference
-            "amount": float(format(amount, ".2f")),
-            # Store the variation used
-            "variation": variation_name,
+    if control_variation_distribution:
+        # Define target distribution (adjust weights as needed)
+        variation_targets = {
+            "standard": 0.25,  # Most common
+            "fractional_cents": 0.15,  # Common in business
+            "dollars_after_fraction": 0.10,  # Common in formal writing
+            "no_and": 0.08,  # Common spoken form
+            "only_dollars": 0.05,  # For whole dollars
+            "cents_only": 0.05,  # For amounts < $1
+            # Other variations get smaller percentages
         }
 
-        examples.append(example)
+        # Fill in remaining variations with equal small weights
+        remaining_weight = 1.0 - sum(variation_targets.values())
+        remaining_variations = [v for v in VARIATIONS.keys() if v not in variation_targets]
+        for var in remaining_variations:
+            variation_targets[var] = remaining_weight / len(remaining_variations)
+
+        # Determine counts
+        variation_counts = {var: int(num_examples * weight) for var, weight in variation_targets.items()}
+
+        # Adjust for rounding errors
+        total_assigned = sum(variation_counts.values())
+        if total_assigned < num_examples:
+            variation_counts["standard"] += num_examples - total_assigned
+
+        # Create variation assignment list
+        variations_list = []
+        for var, count in variation_counts.items():
+            variations_list.extend([var] * count)
+
+        # Shuffle variations
+        random.shuffle(variations_list)
+
+        # Match amounts with variations
+        for amount, variation in zip(amounts, variations_list):
+            # Skip incompatible combinations
+            if variation == "cents_only" and amount >= 1:
+                variation = "standard"  # Fallback
+            if variation == "only_dollars" and amount % 1 != 0:
+                variation = "standard"  # Fallback
+
+            # Generate verbal expression
+            verbal_expr, _ = amount_to_verbal_expression(amount, variation_type=variation)
+
+            # Create example
+            examples.append(
+                {"input": verbal_expr, "target": create_json_output(amount), "amount": float(format(amount, ".2f")), "variation": variation}
+            )
+    else:
+        # Original approach - random selection based on weights
+        for amount in amounts:
+            # Generate verbal expression (with random variation)
+            verbal_expr, variation_name = amount_to_verbal_expression(amount)
+
+            # Create example
+            examples.append(
+                {
+                    "input": verbal_expr,
+                    "target": create_json_output(amount),
+                    "amount": float(format(amount, ".2f")),
+                    "variation": variation_name,
+                }
+            )
 
     return examples
 
@@ -1111,6 +1155,279 @@ def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
         print(f"Variation: {example['variation']}")
 
     return train_path, val_path
+
+
+def create_complete_dataset(
+    num_examples=100000,
+    train_ratio=0.8,
+    val_ratio=0.1,
+    test_ratio=0.1,
+    output_dir=None,
+    seed=42,
+    augmentation_ratio=0.3,
+    hard_examples_ratio=0.05,  # 5% of examples should be hard examples
+):
+    """Create a complete dataset with train, validation, and test splits."""
+    import math
+
+    import datasets
+
+    # Set random seed for reproducibility
+    random.seed(seed)
+    np.random.seed(seed)
+
+    # Verify split ratios sum to 1
+    if not math.isclose(train_ratio + val_ratio + test_ratio, 1.0, abs_tol=1e-10):
+        raise ValueError("Split ratios must sum to 1")
+
+    # Set up output directory
+    if output_dir is None:
+        output_dir = Path(__file__).parents[1] / "data"
+    else:
+        output_dir = Path(output_dir)
+
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Calculate split sizes
+    train_size = int(num_examples * train_ratio)
+    val_size = int(num_examples * val_ratio)
+    test_size = num_examples - train_size - val_size
+
+    # Calculate how many hard examples to generate
+    num_hard_examples = min(int(num_examples * hard_examples_ratio), 500)
+
+    print(f"Generating {num_examples} examples:")
+    print(f"- Training: {train_size}")
+    print(f"- Validation: {val_size}")
+    print(f"- Test: {test_size}")
+    print(f"- Including {num_hard_examples} hard examples ({hard_examples_ratio * 100:.1f}%)")
+
+    # Generate hard examples first
+    if num_hard_examples > 0:
+        print(f"Generating {num_hard_examples} hard examples...")
+        hard_examples = generate_hard_examples(num_hard_examples)
+    else:
+        hard_examples = []
+
+    # Calculate how many regular examples we need
+    num_regular_examples = num_examples - len(hard_examples)
+
+    # Generate regular examples
+    print(f"Generating {num_regular_examples} regular examples...")
+    regular_examples = generate_examples(num_regular_examples, control_variation_distribution=True)
+
+    # Add additional metadata
+    print("Adding metadata...")
+    for example in regular_examples:
+        # Add amount range category
+        amount = example["amount"]
+        example["amount_range"] = classify_amount_range(amount)
+
+        # Add complexity indicator
+        example["complexity"] = classify_complexity(example["input"])
+
+        # Add has_cents flag
+        example["has_cents"] = (amount % 1) != 0
+
+        # Apply augmentation to some examples
+        if random.random() < augmentation_ratio:
+            example["input"] = apply_augmentation(example["input"])
+            example["augmented"] = True
+        else:
+            example["augmented"] = False
+
+    # Combine all examples
+    all_examples = regular_examples + hard_examples
+
+    # Verify we have the correct total number of examples
+    assert len(all_examples) == num_examples, f"Expected {num_examples} total examples, got {len(all_examples)}"
+
+    # Shuffle all examples
+    random.shuffle(all_examples)
+
+    # Split into train, validation, and test sets
+    train_examples = all_examples[:train_size]
+    val_examples = all_examples[train_size : train_size + val_size]
+    test_examples = all_examples[train_size + val_size : train_size + val_size + test_size]
+
+    # Verify we have the correct number of examples in each split
+    assert len(train_examples) == train_size, f"Expected {train_size} training examples, got {len(train_examples)}"
+    assert len(val_examples) == val_size, f"Expected {val_size} validation examples, got {len(val_examples)}"
+    assert len(test_examples) == test_size, f"Expected {test_size} test examples, got {len(test_examples)}"
+
+    # Save to files
+    train_path = output_dir / "train.jsonl"
+    val_path = output_dir / "val.jsonl"
+    test_path = output_dir / "test.jsonl"
+
+    # Write data
+    print("Writing files...")
+    with open(train_path, "w") as f:
+        for example in train_examples:
+            f.write(json.dumps(example) + "\n")
+
+    with open(val_path, "w") as f:
+        for example in val_examples:
+            f.write(json.dumps(example) + "\n")
+
+    with open(test_path, "w") as f:
+        for example in test_examples:
+            f.write(json.dumps(example) + "\n")
+
+    print(f"Files saved to {output_dir}")
+
+    # Create HuggingFace dataset
+    print("Creating HuggingFace dataset...")
+    dataset = datasets.load_dataset("json", data_files={"train": str(train_path), "validation": str(val_path), "test": str(test_path)})
+
+    # Print dataset statistics
+    print_dataset_statistics(dataset)
+
+    # Display sample examples
+    display_sample_examples(dataset, num_examples=5)
+
+    return dataset, (train_path, val_path, test_path)
+
+
+def print_dataset_statistics(dataset):
+    """Print detailed statistics about the dataset."""
+    print("\nDataset Statistics:")
+
+    # Overall counts
+    for split in dataset:
+        print(f"- {split.capitalize()}: {len(dataset[split])} examples")
+
+    # Variation distribution
+    print("\nVariation Distribution (Top 10):")
+    for split in dataset:
+        variation_counts = {}
+        for example in dataset[split]:
+            variation = example["variation"]
+            variation_counts[variation] = variation_counts.get(variation, 0) + 1
+
+        print(f"\n{split.capitalize()} split:")
+        for variation, count in sorted(variation_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+            percentage = (count / len(dataset[split])) * 100
+            print(f"  {variation}: {count} examples ({percentage:.1f}%)")
+
+    # Amount range distribution
+    print("\nAmount Range Distribution:")
+    for split in dataset:
+        range_counts = {}
+        for example in dataset[split]:
+            amount_range = example["amount_range"]
+            range_counts[amount_range] = range_counts.get(amount_range, 0) + 1
+
+        print(f"\n{split.capitalize()} split:")
+        for range_name, count in sorted(range_counts.items()):
+            percentage = (count / len(dataset[split])) * 100
+            print(f"  {range_name}: {count} examples ({percentage:.1f}%)")
+
+
+def display_sample_examples(dataset, num_examples=5):
+    """Display a sample of examples from each split."""
+    print("\nSample Examples:")
+
+    for split in dataset:
+        print(f"\n{split.capitalize()} Split Examples:")
+
+        # Get random indices
+        indices = random.sample(range(len(dataset[split])), min(num_examples, len(dataset[split])))
+
+        for i, idx in enumerate(indices):
+            example = dataset[split][idx]
+
+            print(f"\nExample {i + 1}:")
+            print(f"Input: {example['input']}")
+            print(f"Target: {example['target']}")
+            print(f"Amount: ${example['amount']:.2f}")
+            print(f"Variation: {example['variation']}")
+            print(f"Amount Range: {example['amount_range']}")
+            print(f"Complexity: {example['complexity']}")
+            print(f"Has Cents: {'Yes' if example['has_cents'] else 'No'}")
+            print(f"Augmented: {'Yes' if example.get('augmented', False) else 'No'}")
+
+
+def generate_hard_examples(num_hard_examples=500):
+    """Generate a set of challenging examples to test specific edge cases."""
+    hard_examples = []
+
+    # Define challenging amounts
+    challenging_amounts = [
+        0.01,  # One cent
+        0.25,  # Quarter
+        0.99,  # Just under a dollar
+        1.00,  # Exactly one dollar
+        1.01,  # Just over a dollar
+        9.99,  # Common price point
+        100.00,  # Even hundred
+        1000.00,  # Even thousand
+        1234.56,  # Sequential digits
+        10000.00,  # Even ten thousand
+        1000000.00,  # Million
+        1000000.01,  # Just over a million
+    ]
+
+    # Important variations to test with every challenging amount
+    key_variations = ["standard", "fractional_cents", "dollars_after_fraction", "no_and", "with_and_in_numbers", "legal_document"]
+
+    # Generate combinations
+    for amount in challenging_amounts:
+        for variation in key_variations:
+            # Skip incompatible combinations
+            if variation == "cents_only" and amount >= 1:
+                continue
+
+            # Generate verbal expression
+            verbal_expr, _ = amount_to_verbal_expression(amount, variation_type=variation)
+
+            # Create example
+            hard_examples.append(
+                {
+                    "input": verbal_expr,
+                    "target": create_json_output(amount),
+                    "amount": float(format(amount, ".2f")),
+                    "variation": variation,
+                    "hard_example": True,  # Mark as hard example
+                    "amount_range": classify_amount_range(amount),
+                    "has_cents": (amount % 1) != 0,
+                    "complexity": classify_complexity(verbal_expr),
+                    "augmented": False,
+                }
+            )
+
+    # Cap at num_hard_examples
+    random.shuffle(hard_examples)
+    return hard_examples[:num_hard_examples]
+
+
+def classify_amount_range(amount):
+    """Helper to classify an amount into a range category."""
+    if amount < 1:
+        return "cents_only"
+    elif amount < 10:
+        return "single_digit"
+    elif amount < 100:
+        return "double_digit"
+    elif amount < 1000:
+        return "triple_digit"
+    elif amount < 10000:
+        return "thousands"
+    elif amount < 100000:
+        return "tens_thousands"
+    else:
+        return "hundreds_thousands_plus"
+
+
+def classify_complexity(text):
+    """Helper to classify text complexity."""
+    if "thousand" in text or "million" in text:
+        return "complex"
+    elif "hundred" in text:
+        return "medium"
+    else:
+        return "simple"
 
 
 if __name__ == "__main__":

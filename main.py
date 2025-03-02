@@ -164,16 +164,28 @@ def generate_data(args):
     """Generate synthetic training data."""
     logger.info("Generating synthetic data...")
     logger.info(f"Output directory: {args.output_dir}")
+    logger.info(f"Number of examples: {args.num_examples}")
 
     # Import here to avoid loading modules unnecessarily
-    from src.data_generator import generate_dataset
+    from src.data_generator import create_complete_dataset
 
-    generate_dataset(
+    dataset, paths = create_complete_dataset(
         num_examples=args.num_examples,
-        output_dir=args.output_dir,
         train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        test_ratio=1.0 - args.train_ratio - args.val_ratio,
+        output_dir=args.output_dir,
+        seed=args.seed,
+        augmentation_ratio=args.augmentation_ratio,
+        hard_examples_ratio=args.hard_examples_ratio,
     )
+
     logger.info("Data generation completed.")
+    logger.info(f"Dataset splits: {list(dataset.keys())}")
+    logger.info(f"Train examples: {len(dataset['train'])}")
+    logger.info(f"Validation examples: {len(dataset['validation'])}")
+    logger.info(f"Test examples: {len(dataset['test'])}")
+    logger.info(f"Files saved to: {args.output_dir}")
 
 
 def main():
@@ -275,8 +287,8 @@ def main():
     data_parser.add_argument(
         "--num-examples",
         type=int,
-        default=10000,
-        help="Number of examples to generate",
+        default=100000,
+        help="Total number of examples to generate",
     )
     data_parser.add_argument(
         "--output-dir",
@@ -288,7 +300,31 @@ def main():
         "--train-ratio",
         type=float,
         default=0.8,
-        help="Ratio of examples to use for training (vs validation)",
+        help="Ratio of examples to use for training",
+    )
+    data_parser.add_argument(
+        "--val-ratio",
+        type=float,
+        default=0.1,
+        help="Ratio of examples to use for validation",
+    )
+    data_parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility",
+    )
+    data_parser.add_argument(
+        "--augmentation-ratio",
+        type=float,
+        default=0.3,
+        help="Proportion of examples to augment",
+    )
+    data_parser.add_argument(
+        "--hard-examples-ratio",
+        type=float,
+        default=0.05,
+        help="Proportion of examples that should be hard examples (max 500)",
     )
 
     args = parser.parse_args()
