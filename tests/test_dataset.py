@@ -25,15 +25,15 @@ def sample_data():
     train_data = [
         {
             "input": "one hundred twenty-three dollars and forty-five cents",
-            "output": '{"amount": 123.45}',
+            "target": '{"amount": 123.45}',
         },
-        {"input": "five dollars", "output": '{"amount": 5.00}'},
-        {"input": "seventy-five cents", "output": '{"amount": 0.75}'},
+        {"input": "five dollars", "target": '{"amount": 5.00}'},
+        {"input": "seventy-five cents", "target": '{"amount": 0.75}'},
     ]
 
     val_data = [
-        {"input": "two thousand dollars", "output": '{"amount": 2000.00}'},
-        {"input": "one dollar and one cent", "output": '{"amount": 1.01}'},
+        {"input": "two thousand dollars", "target": '{"amount": 2000.00}'},
+        {"input": "one dollar and one cent", "target": '{"amount": 1.01}'},
     ]
 
     with tempfile.TemporaryDirectory() as temp_dir:

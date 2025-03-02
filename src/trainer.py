@@ -8,7 +8,7 @@ import os
 
 import evaluate
 import numpy as np
-import wandb
+import torch
 from Levenshtein import distance as levenshtein_distance
 from transformers import (
     EarlyStoppingCallback,
@@ -17,6 +17,7 @@ from transformers import (
 )
 
 import config
+import wandb
 from src.dataset import prepare_dataset
 from src.model import initialize_model, save_model
 
@@ -160,6 +161,13 @@ def compute_metrics(eval_preds):
 
     # Get tokenizer from model
     decoder_tokenizer = eval_preds.model.tokenizer
+
+    # Ensure tensors are on CPU for decoding
+    if hasattr(preds, "device") and str(preds.device) != "cpu":
+        preds = preds.cpu()
+
+    if hasattr(labels, "device") and str(labels.device) != "cpu":
+        labels = labels.cpu()
 
     # Decode predictions and labels
     decoded_preds = decoder_tokenizer.batch_decode(preds, skip_special_tokens=True)
@@ -444,7 +452,11 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
         ).input_ids.to(device)
 
         # Generate prediction
-        output_ids = model.generate(input_ids, max_length=config.MAX_TARGET_LENGTH, num_beams=config.NUM_BEAMS, early_stopping=True)
+        with torch.no_grad():
+            output_ids = model.generate(input_ids, max_length=config.MAX_TARGET_LENGTH, num_beams=config.NUM_BEAMS, early_stopping=True)
+
+        # Move output back to CPU for decoding
+        output_ids = output_ids.cpu()
 
         # Decode prediction
         prediction = tokenizer.decode(output_ids[0], skip_special_tokens=True)

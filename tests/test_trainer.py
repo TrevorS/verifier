@@ -53,12 +53,12 @@ def sample_data():
     # Generate training data
     for i in range(train_size):
         example_idx = i % len(examples)
-        train_data.append({"input": examples[example_idx][0], "output": json.dumps(examples[example_idx][1])})
+        train_data.append({"input": examples[example_idx][0], "target": json.dumps(examples[example_idx][1])})
 
     # Generate validation data
     for i in range(val_size):
         example_idx = i % len(examples)
-        val_data.append({"input": examples[example_idx][0], "output": json.dumps(examples[example_idx][1])})
+        val_data.append({"input": examples[example_idx][0], "target": json.dumps(examples[example_idx][1])})
 
     with tempfile.TemporaryDirectory() as temp_dir:
         train_path = Path(temp_dir) / "train_sample.jsonl"

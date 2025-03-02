@@ -5,6 +5,8 @@ Configuration settings for the monetary expressions to JSON converter model.
 import os
 from pathlib import Path
 
+import torch
+
 # Project paths
 ROOT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = ROOT_DIR / "data"
@@ -24,6 +26,14 @@ TEST_DATA_PATH = DATA_DIR / "test.jsonl"
 MODEL_NAME = "google/flan-t5-small"
 MAX_INPUT_LENGTH = 128
 MAX_TARGET_LENGTH = 32
+
+# Device configuration (automatic detection)
+if torch.cuda.is_available():
+    DEVICE = "cuda"
+elif hasattr(torch, "mps") and torch.backends.mps.is_available():
+    DEVICE = "mps"
+else:
+    DEVICE = "cpu"
 
 # Training parameters
 BATCH_SIZE = 16

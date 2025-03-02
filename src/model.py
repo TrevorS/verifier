@@ -24,7 +24,7 @@ def initialize_model(model_name: Optional[str] = None, device: Optional[Union[st
 
     Args:
         model_name (str, optional): Name of the pretrained model. Defaults to config.MODEL_NAME.
-        device (str or torch.device, optional): Device to place the model on. Defaults to CUDA if available, else CPU.
+        device (str or torch.device, optional): Device to place the model on. Defaults to config.DEVICE.
 
     Returns:
         T5ForConditionalGeneration: Initialized FLAN-T5-Small model
@@ -36,7 +36,7 @@ def initialize_model(model_name: Optional[str] = None, device: Optional[Union[st
         logger.warning(f"Expected 'google/flan-t5-small' but got '{model_name}'. Proceeding with {model_name}.")
 
     if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = config.DEVICE
 
     logger.info(f"Initializing FLAN-T5-Small model on {device}")
 
@@ -115,13 +115,13 @@ def load_model(model_path: str, device: Optional[Union[str, torch.device]] = Non
 
     Args:
         model_path (str): Path to the saved model
-        device (str or torch.device, optional): Device to place the model on. Defaults to CUDA if available, else CPU.
+        device (str or torch.device, optional): Device to place the model on. Defaults to config.DEVICE.
 
     Returns:
         tuple: (model, tokenizer, config)
     """
     if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = config.DEVICE
 
     logger.info(f"Loading model from {model_path} to {device}")
 

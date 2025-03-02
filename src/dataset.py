@@ -69,7 +69,7 @@ def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_len
         inputs = examples["input"]
 
         # Get the target texts
-        targets = examples["output"]
+        targets = examples["target"]
 
         # Tokenize inputs
         model_inputs = tokenizer(
