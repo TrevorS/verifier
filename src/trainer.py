@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from Levenshtein import distance as levenshtein_distance
 from transformers import (
+    AutoTokenizer,
     EarlyStoppingCallback,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
@@ -21,6 +22,10 @@ import wandb
 from src.dataset import prepare_dataset
 from src.model import initialize_model, save_model
 
+# Set environment variable to avoid tokenizers parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# Configure logger
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +85,8 @@ def configure_training_args(
         logging_steps = config.LOGGING_STEPS
 
     if evaluation_strategy is None:
-        evaluation_strategy = config.EVALUATION_STRATEGY
+        # Use the new parameter name if available, otherwise fallback
+        evaluation_strategy = getattr(config, "EVAL_STRATEGY", getattr(config, "EVALUATION_STRATEGY", "steps"))
 
     if eval_steps is None:
         eval_steps = config.EVAL_STEPS
@@ -104,7 +110,7 @@ def configure_training_args(
         weight_decay=weight_decay,
         warmup_ratio=warmup_ratio,
         logging_steps=logging_steps,
-        evaluation_strategy=evaluation_strategy,
+        eval_strategy=evaluation_strategy,
         eval_steps=eval_steps,
         save_steps=save_steps,
         save_total_limit=2,
@@ -117,7 +123,10 @@ def configure_training_args(
         fp16=fp16,
         report_to="wandb" if wandb.run is not None else "none",
         push_to_hub=False,
+        run_name=f"finetuned-{os.path.basename(output_dir)}-{wandb.util.generate_id()}" if wandb.run is not None else None,
     )
+
+    logger.info(f"Training configuration: {num_train_epochs} epochs, batch size {batch_size}, eval steps {eval_steps}")
 
     return training_args
 
@@ -159,8 +168,16 @@ def compute_metrics(eval_preds):
     if isinstance(preds, tuple):
         preds = preds[0]
 
-    # Get tokenizer from model
-    decoder_tokenizer = eval_preds.model.tokenizer
+    # Access the tokenizer globally (we'll make sure it's accessible)
+    try:
+        # First try to get it from the trainer's model if available
+        decoder_tokenizer = compute_metrics.tokenizer
+    except AttributeError:
+        # Fall back to initializing a new tokenizer if not available
+        logger.info("Tokenizer not found on compute_metrics function, initializing a new one")
+        decoder_tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
+        # Store tokenizer for future use
+        compute_metrics.tokenizer = decoder_tokenizer
 
     # Ensure tensors are on CPU for decoding
     if hasattr(preds, "device") and str(preds.device) != "cpu":
@@ -169,9 +186,35 @@ def compute_metrics(eval_preds):
     if hasattr(labels, "device") and str(labels.device) != "cpu":
         labels = labels.cpu()
 
-    # Decode predictions and labels
-    decoded_preds = decoder_tokenizer.batch_decode(preds, skip_special_tokens=True)
-    decoded_labels = decoder_tokenizer.batch_decode(labels, skip_special_tokens=True)
+    # Convert to list format first
+    preds_list = preds.tolist()
+    labels_list = labels.tolist()
+
+    # Safely decode by filtering out invalid token IDs
+    try:
+        # Filter out any out-of-range token IDs
+        max_token_id = decoder_tokenizer.vocab_size
+
+        # Clean prediction token IDs
+        clean_preds = []
+        for seq in preds_list:
+            clean_seq = [token_id for token_id in seq if 0 <= token_id < max_token_id]
+            clean_preds.append(clean_seq)
+
+        # Clean label token IDs
+        clean_labels = []
+        for seq in labels_list:
+            clean_seq = [token_id for token_id in seq if 0 <= token_id < max_token_id]
+            clean_labels.append(clean_seq)
+
+        # Decode predictions and labels
+        decoded_preds = decoder_tokenizer.batch_decode(clean_preds, skip_special_tokens=True)
+        decoded_labels = decoder_tokenizer.batch_decode(clean_labels, skip_special_tokens=True)
+    except Exception as e:
+        logger.error(f"Error during tokenizer decoding: {e}")
+        logger.error("Falling back to empty strings for predictions and labels")
+        decoded_preds = ["" for _ in range(len(preds_list))]
+        decoded_labels = ["" for _ in range(len(labels_list))]
 
     # Post-process predictions and labels
     decoded_preds = [pred.strip() for pred in decoded_preds]
@@ -292,6 +335,7 @@ def train_model(
     output_dir=None,
     wandb_logging=True,
     early_stopping_patience=3,
+    quick_test=False,
 ):
     """
     Train the model on the provided dataset.
@@ -303,6 +347,7 @@ def train_model(
         output_dir (str or Path): Directory to save model checkpoints
         wandb_logging (bool): Whether to log to Weights & Biases
         early_stopping_patience (int): Number of evaluations with no improvement after which to stop
+        quick_test (bool): If True, runs a quick test with a small subset of data and reduced steps
 
     Returns:
         str: Path to the saved model
@@ -323,6 +368,19 @@ def train_model(
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
+    # Set quick test parameters if enabled
+    training_args_kwargs = {}
+    if quick_test:
+        logger.info("🧪 Running in quick test mode with reduced dataset and parameters")
+        training_args_kwargs = {
+            "num_train_epochs": 1,
+            "batch_size": 4,
+            "logging_steps": 5,
+            "evaluation_strategy": "steps",
+            "eval_steps": 10,
+            "save_steps": 10,
+        }
+
     # Initialize W&B
     if wandb_logging:
         wandb.init(
@@ -331,13 +389,15 @@ def train_model(
             config={
                 "model_name": model_name,
                 "learning_rate": config.LEARNING_RATE,
-                "batch_size": config.BATCH_SIZE,
-                "epochs": config.NUM_EPOCHS,
+                "batch_size": training_args_kwargs.get("batch_size", config.BATCH_SIZE),
+                "epochs": training_args_kwargs.get("num_train_epochs", config.NUM_EPOCHS),
                 "warmup_ratio": config.WARMUP_RATIO,
                 "weight_decay": config.WEIGHT_DECAY,
                 "max_input_length": config.MAX_INPUT_LENGTH,
                 "max_target_length": config.MAX_TARGET_LENGTH,
                 "early_stopping_patience": early_stopping_patience,
+                "quick_test": quick_test,
+                "device": config.DEVICE,
             },
         )
 
@@ -349,21 +409,64 @@ def train_model(
         model_name,
     )
 
+    # Limit dataset size for quick test
+    if quick_test:
+        # Take a small subset of the data for a quick test
+        train_size = min(100, len(preprocessed_dataset["train"]))
+        val_size = min(20, len(preprocessed_dataset["validation"]))
+
+        # Create smaller datasets
+        preprocessed_dataset["train"] = preprocessed_dataset["train"].select(range(train_size))
+        preprocessed_dataset["validation"] = preprocessed_dataset["validation"].select(range(val_size))
+
+        logger.info(f"Using {train_size} training examples and {val_size} validation examples for quick test")
+
     # Initialize model
     logger.info(f"Initializing model: {model_name}")
     model = initialize_model(model_name)
 
+    # Store tokenizer for compute_metrics function
+    compute_metrics.tokenizer = tokenizer
+
     # Set up trainer
     logger.info("Setting up trainer...")
-    trainer = setup_trainer(
-        model,
-        tokenizer,
-        preprocessed_dataset["train"],
-        preprocessed_dataset["validation"],
-        data_collator,
-        output_dir,
-        early_stopping_patience,
+    training_args = configure_training_args(output_dir, **training_args_kwargs)
+
+    # Create trainer with updated parameters to avoid deprecation warnings
+    trainer_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": preprocessed_dataset["train"],
+        "eval_dataset": preprocessed_dataset["validation"],
+        "data_collator": data_collator,
+        "compute_metrics": compute_metrics,
+        "callbacks": [EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)],
+    }
+
+    # Store the tokenizer so we can use it for compute_metrics
+    compute_metrics.tokenizer = tokenizer
+
+    # Handle deprecation of tokenizer parameter in Seq2SeqTrainer
+    # For now, we'll use the tokenizer parameter with a warning, but the code is ready
+    # for a proper fix when transformers 5.0.0 is released
+    logger.warning(
+        "Using deprecated 'tokenizer' parameter in Seq2SeqTrainer. "
+        + "This will be removed in version 5.0.0. We'll update this code when the "
+        + "processing_class API is stabilized in transformers."
     )
+    trainer_kwargs["tokenizer"] = tokenizer
+
+    # Note: The following code is ready for when transformers 5.0.0 is released:
+    # from transformers.processing_utils import ProcessorMixin
+    # class TokenizerWrapper(ProcessorMixin):
+    #     def __init__(self, tokenizer):
+    #         self.tokenizer = tokenizer
+    #     def __call__(self, *args, **kwargs):
+    #         return self.tokenizer(*args, **kwargs)
+    # trainer_kwargs["processing_class"] = TokenizerWrapper(tokenizer)
+
+    # Create the trainer
+    trainer = Seq2SeqTrainer(**trainer_kwargs)
 
     # Train the model
     logger.info("Starting training...")
@@ -397,12 +500,17 @@ def train_model(
     )
 
     # Generate training reports
-    generate_training_reports(
-        trainer,
-        tokenizer,
-        preprocessed_dataset["validation"],
-        os.path.join(output_dir, "reports"),
-    )
+    try:
+        logger.info("Generating training reports...")
+        generate_training_reports(
+            trainer,
+            tokenizer,
+            preprocessed_dataset["validation"],
+            os.path.join(output_dir, "reports"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate training reports: {e}")
+        logger.error("Continuing without reports generation")
 
     # Finish W&B run
     if wandb_logging:
@@ -425,95 +533,142 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
     Returns:
         None
     """
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    try:
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
 
-    # Get a subset of examples
-    if len(eval_dataset) > num_examples:
-        indices = np.random.choice(len(eval_dataset), num_examples, replace=False)
-        examples = [eval_dataset[i] for i in indices]
-    else:
-        examples = [eval_dataset[i] for i in range(len(eval_dataset))]
+        # Get a subset of examples
+        if len(eval_dataset) > num_examples:
+            # Convert numpy indices to native Python integers
+            indices = np.random.choice(len(eval_dataset), num_examples, replace=False)
+            indices = [int(i) for i in indices]  # Convert numpy.int64 to Python int
+            examples = [eval_dataset[i] for i in indices]
+        else:
+            examples = [eval_dataset[i] for i in range(len(eval_dataset))]
 
-    # Generate predictions
-    inputs = [tokenizer.decode(ex["input_ids"], skip_special_tokens=True) for ex in examples]
-    references = [tokenizer.decode(ex["labels"], skip_special_tokens=True) for ex in examples]
+        # Generate predictions
+        inputs = [tokenizer.decode(ex["input_ids"], skip_special_tokens=True) for ex in examples]
+        references = [tokenizer.decode(ex["labels"], skip_special_tokens=True) for ex in examples]
 
-    # Get model predictions
-    model = trainer.model
-    device = model.device
+        # Get model predictions
+        model = trainer.model
+        device = model.device
+        logger.info(f"Generating example predictions on {device}")
 
-    # Generate predictions
-    predictions = []
-    for input_text in inputs:
-        # Tokenize input
-        input_ids = tokenizer(
-            input_text, max_length=config.MAX_INPUT_LENGTH, padding="max_length", truncation=True, return_tensors="pt"
-        ).input_ids.to(device)
+        # Generate predictions
+        predictions = []
+        for input_text in inputs:
+            try:
+                # Tokenize input
+                input_ids = tokenizer(
+                    input_text, max_length=config.MAX_INPUT_LENGTH, padding="max_length", truncation=True, return_tensors="pt"
+                ).input_ids.to(device)
 
-        # Generate prediction
-        with torch.no_grad():
-            output_ids = model.generate(input_ids, max_length=config.MAX_TARGET_LENGTH, num_beams=config.NUM_BEAMS, early_stopping=True)
+                # Generate prediction
+                with torch.no_grad():
+                    # Use config's NUM_BEAMS value and ensure early_stopping is only set when using beam search
+                    generation_kwargs = {
+                        "max_length": config.MAX_TARGET_LENGTH,
+                        "num_beams": config.NUM_BEAMS,
+                    }
 
-        # Move output back to CPU for decoding
-        output_ids = output_ids.cpu()
+                    # Only add early stopping for beam search
+                    if config.NUM_BEAMS > 1:
+                        generation_kwargs["early_stopping"] = True
 
-        # Decode prediction
-        prediction = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-        predictions.append(prediction)
+                    output_ids = model.generate(input_ids, **generation_kwargs)
 
-    # Create report
-    report = []
-    for i in range(len(inputs)):
-        # Evaluate prediction
-        is_exact_match = predictions[i] == references[i]
-        is_json_valid = is_valid_json(predictions[i]) and is_valid_json(references[i])
+                # Move output back to CPU for decoding
+                output_ids = output_ids.cpu()
 
-        # Calculate Levenshtein distance
-        lev_distance = levenshtein_distance(predictions[i], references[i])
+                # Decode prediction
+                prediction = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+                predictions.append(prediction)
+            except Exception as e:
+                logger.error(f"Error generating prediction for input: {input_text}")
+                logger.error(f"Error details: {str(e)}")
+                predictions.append("")
 
-        report.append(
-            {
-                "input": inputs[i],
-                "reference": references[i],
-                "prediction": predictions[i],
-                "exact_match": is_exact_match,
-                "valid_json": is_json_valid,
-                "levenshtein_distance": lev_distance,
+        # Create report
+        report = []
+        for i in range(len(inputs)):
+            try:
+                # Evaluate prediction
+                is_exact_match = predictions[i] == references[i]
+                is_json_valid = is_valid_json(predictions[i]) and is_valid_json(references[i])
+
+                # Calculate Levenshtein distance
+                lev_distance = levenshtein_distance(predictions[i], references[i])
+
+                report.append(
+                    {
+                        "input": inputs[i],
+                        "reference": references[i],
+                        "prediction": predictions[i],
+                        "exact_match": is_exact_match,
+                        "valid_json": is_json_valid,
+                        "levenshtein_distance": lev_distance,
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error creating report entry for index {i}")
+                logger.error(f"Error details: {str(e)}")
+                # Add a simplified report entry
+                report.append(
+                    {
+                        "input": inputs[i],
+                        "reference": references[i],
+                        "prediction": predictions[i] if i < len(predictions) else "",
+                        "error": str(e),
+                    }
+                )
+
+        # Save report to JSON
+        report_path = os.path.join(output_dir, "prediction_examples.json")
+        with open(report_path, "w") as f:
+            json.dump(report, f, indent=2)
+
+        # Calculate summary statistics
+        try:
+            exact_match_count = sum(1 for ex in report if ex.get("exact_match", False))
+            valid_json_count = sum(1 for ex in report if ex.get("valid_json", False))
+
+            # Only include examples without errors for levenshtein distance
+            levenshtein_distances = [ex["levenshtein_distance"] for ex in report if "levenshtein_distance" in ex]
+            avg_levenshtein = np.mean(levenshtein_distances) if levenshtein_distances else float("inf")
+
+            summary = {
+                "num_examples": len(report),
+                "exact_match_ratio": exact_match_count / len(report) if report else 0,
+                "valid_json_ratio": valid_json_count / len(report) if report else 0,
+                "avg_levenshtein_distance": avg_levenshtein,
             }
-        )
 
-    # Save report to JSON
-    report_path = os.path.join(output_dir, "prediction_examples.json")
-    with open(report_path, "w") as f:
-        json.dump(report, f, indent=2)
+            # Save summary to JSON
+            summary_path = os.path.join(output_dir, "prediction_summary.json")
+            with open(summary_path, "w") as f:
+                json.dump(summary, f, indent=2)
 
-    # Calculate summary statistics
-    exact_match_count = sum(1 for ex in report if ex["exact_match"])
-    valid_json_count = sum(1 for ex in report if ex["valid_json"])
-    avg_levenshtein = np.mean([ex["levenshtein_distance"] for ex in report])
+            # Log to W&B if enabled
+            if wandb.run is not None:
+                wandb.log(summary)
 
-    summary = {
-        "num_examples": len(report),
-        "exact_match_ratio": exact_match_count / len(report),
-        "valid_json_ratio": valid_json_count / len(report),
-        "avg_levenshtein_distance": avg_levenshtein,
-    }
+                # Create a W&B Table
+                columns = ["input", "reference", "prediction", "exact_match", "valid_json", "levenshtein_distance"]
+                data = []
+                for ex in report:
+                    if all(col in ex for col in columns):
+                        data.append([ex[col] for col in columns])
 
-    # Save summary to JSON
-    summary_path = os.path.join(output_dir, "prediction_summary.json")
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2)
+                if data:
+                    table = wandb.Table(columns=columns, data=data)
+                    wandb.log({"prediction_examples": table})
 
-    # Log to W&B if enabled
-    if wandb.run is not None:
-        wandb.log(summary)
-
-        # Create a W&B Table
-        columns = ["input", "reference", "prediction", "exact_match", "valid_json", "levenshtein_distance"]
-        data = [[ex[col] for col in columns] for ex in report]
-        table = wandb.Table(columns=columns, data=data)
-        wandb.log({"prediction_examples": table})
-
-    logger.info(f"Training reports saved to {output_dir}")
-    logger.info(f"Summary: {summary}")
+            logger.info(f"Training reports saved to {output_dir}")
+            logger.info(f"Summary: {summary}")
+        except Exception as e:
+            logger.error(f"Error calculating summary statistics: {str(e)}")
+            logger.info(f"Training reports (without summary) saved to {output_dir}")
+    except Exception as e:
+        logger.error(f"Error generating training reports: {str(e)}")
+        logger.error("Training will continue, but reports could not be generated")

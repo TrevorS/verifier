@@ -80,6 +80,7 @@ def train(args):
         output_dir=args.output_dir,
         wandb_logging=not args.no_wandb,
         early_stopping_patience=args.early_stopping_patience,
+        quick_test=args.quick_test if hasattr(args, "quick_test") else False,
     )
     logger.info(f"Training completed. Best model saved at: {best_model_path}")
 
@@ -234,6 +235,11 @@ def main():
         "--test-run",
         action="store_true",
         help="Run with a small subset of data to test the pipeline end-to-end",
+    )
+    train_parser.add_argument(
+        "--quick-test",
+        action="store_true",
+        help="Run a quick test with a small subset of data",
     )
 
     # Evaluate parser

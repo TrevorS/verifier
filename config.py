@@ -2,10 +2,14 @@
 Configuration settings for the monetary expressions to JSON converter model.
 """
 
+import logging
 import os
 from pathlib import Path
 
 import torch
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Project paths
 ROOT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -30,10 +34,13 @@ MAX_TARGET_LENGTH = 32
 # Device configuration (automatic detection)
 if torch.cuda.is_available():
     DEVICE = "cuda"
+    logger.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
 elif hasattr(torch, "mps") and torch.backends.mps.is_available():
     DEVICE = "mps"
+    logger.info("Using Apple Silicon MPS (Metal Performance Shaders)")
 else:
     DEVICE = "cpu"
+    logger.info("No GPU detected, using CPU for training")
 
 # Training parameters
 BATCH_SIZE = 16
@@ -42,7 +49,7 @@ WEIGHT_DECAY = 0.01
 NUM_EPOCHS = 10
 WARMUP_RATIO = 0.1
 GRADIENT_ACCUMULATION_STEPS = 1
-EVALUATION_STRATEGY = "steps"
+EVAL_STRATEGY = "steps"
 EVAL_STEPS = 500
 SAVE_STEPS = 500
 LOGGING_STEPS = 100
@@ -51,7 +58,7 @@ FP16 = False  # Mixed precision training
 
 # Generation parameters
 MAX_NEW_TOKENS = 32
-NUM_BEAMS = 1  # Greedy decoding
+NUM_BEAMS = 4  # Using beam search instead of greedy decoding for better results
 
 # Logging
 WANDB_PROJECT = "monetary-expressions-to-json"
