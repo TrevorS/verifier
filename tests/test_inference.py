@@ -214,19 +214,21 @@ class TestInferencePipeline:
         # Mock the model loading and inference
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
-        mock_load_model.return_value = (mock_model, mock_tokenizer)
+        mock_metadata = MagicMock()
+        mock_load_model.return_value = (mock_model, mock_tokenizer, mock_metadata)
         mock_run_inference.return_value = '{"amount": 25.10, "currency": "USD"}'
 
         # Run the pipeline
         result = inference_pipeline("twenty-five dollars and ten cents", "model/path")
 
         # Check the result
-        json_str, json_obj, is_valid, amount = result
+        json_str, json_obj, is_valid, amount, raw_output = result
         assert json_str == '{"amount": 25.10, "currency": "USD"}'
         assert json_obj["amount"] == 25.10
         assert json_obj["currency"] == "USD"
         assert is_valid is True
         assert amount == 25.10
+        assert raw_output == '{"amount": 25.10, "currency": "USD"}'
 
         # Check that the functions were called correctly
         mock_load_model.assert_called_once_with("model/path")

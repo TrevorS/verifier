@@ -5,13 +5,802 @@ Data generation module for creating synthetic training data.
 import json
 import os
 import random
+import re
 import string
 from pathlib import Path
 
 import inflect
 import numpy as np
 
-from src.utils import format_json, normalize_text, number_to_words
+from src.utils import format_json, normalize_text
+
+# Create a global inflect engine for use across all variation functions
+p = inflect.engine()
+
+# Dictionary of variation functions
+VARIATIONS = {}
+
+
+def register_variation(name, weight=1.0):
+    """
+    Decorator to register a variation function.
+
+    Args:
+        name (str): The name of the variation
+        weight (float): The weight to assign this variation (higher = more frequent)
+    """
+
+    def decorator(func):
+        VARIATIONS[name] = {"func": func, "weight": weight}
+        return func
+
+    return decorator
+
+
+# Helper functions for variations
+
+
+def dollars_to_words(dollars):
+    """Convert dollar amount to words."""
+    return p.number_to_words(dollars)
+
+
+def cents_to_words(cents):
+    """Convert cents amount to words."""
+    return p.number_to_words(cents)
+
+
+def dollars_to_text(dollars):
+    """Format dollars with proper pluralization."""
+    dollar_words = dollars_to_words(dollars)
+    return f"{dollar_words} {p.plural('dollar', dollars)}"
+
+
+def cents_to_text(cents):
+    """Format cents with proper pluralization."""
+    cent_words = cents_to_words(cents)
+    return f"{cent_words} {p.plural('cent', cents)}"
+
+
+def format_large_number(number, use_and=True, use_commas=True):
+    """Format large numbers with optional 'and' and commas."""
+    words = p.number_to_words(number)
+
+    # Add 'and' after hundreds if requested
+    if use_and and number > 100:
+        words = re.sub(r"hundred (?=\w)", "hundred and ", words)
+
+    # Add or remove commas based on preference
+    if use_commas:
+        # Ensure commas in millions, thousands, etc.
+        words = re.sub(r"million (?=\w)", "million, ", words)
+        words = re.sub(r"thousand (?=\w)", "thousand, ", words)
+    else:
+        # Remove all commas
+        words = words.replace(",", "")
+
+    return words.strip()
+
+
+def get_cents_as_fraction(cents):
+    """Format cents as a fraction (xx/100)."""
+    return f"{cents}/100"
+
+
+def unhyphenate_compound(text):
+    """Remove hyphens from compound numbers."""
+    return text.replace("-", " ")
+
+
+def is_round_amount(amount):
+    """Check if an amount is a whole number of dollars."""
+    return amount == int(amount)
+
+
+# Variation functions
+
+
+@register_variation("standard", weight=10.0)
+def standard_format(amount):
+    """
+    Standard dollars and cents format.
+    Example: 25.10 → "twenty-five dollars and ten cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Handle cents part
+    if cents > 0:
+        if dollars > 0:
+            result.append("and")
+        result.append(cents_to_text(cents))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    return " ".join(result)
+
+
+@register_variation("fractional_cents", weight=8.0)
+def fractional_cents_format(amount):
+    """
+    Dollars with cents expressed as a fraction (xx/100).
+    Example: 25.10 → "twenty-five dollars and 10/100"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Handle cents part
+    if cents > 0 or (dollars > 0 and cents == 0):  # Include "00/100" if there are dollars
+        if dollars > 0:
+            result.append("and")
+        result.append(get_cents_as_fraction(cents))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    return " ".join(result)
+
+
+@register_variation("dollars_after_fraction", weight=6.0)
+def dollars_after_fraction_format(amount):
+    """
+    Fractional cents with "dollars" at the end.
+    Example: 25.10 → "twenty-five and 10/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    if dollars == 0:
+        return f"{get_cents_as_fraction(cents)} dollars"
+
+    dollar_words = dollars_to_words(dollars)
+
+    if cents == 0:
+        return f"{dollar_words} dollars"
+    else:
+        return f"{dollar_words} and {get_cents_as_fraction(cents)} dollars"
+
+
+@register_variation("only_dollars", weight=5.0)
+def only_dollars_format(amount):
+    """
+    "dollars only" for whole dollar amounts.
+    Example: 25.00 → "twenty-five dollars only"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Only use this format if there are no cents
+    if cents > 0:
+        return standard_format(amount)
+
+    if dollars == 0:
+        return "zero dollars"
+
+    return f"{dollars_to_text(dollars)} only"
+
+
+@register_variation("no_cents_specification", weight=4.0)
+def no_cents_specification(amount):
+    """
+    Omits cents if the value is zero.
+    Example: 25.00 → "twenty-five dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    if cents == 0:
+        return dollars_to_text(dollars)
+
+    return standard_format(amount)
+
+
+@register_variation("no_and", weight=4.0)
+def no_and_format(amount):
+    """
+    Omits the "and" between dollars and cents.
+    Example: 25.10 → "twenty-five dollars ten cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Handle cents part
+    if cents > 0:
+        result.append(cents_to_text(cents))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    return " ".join(result)
+
+
+@register_variation("non_hyphenated", weight=3.0)
+def non_hyphenated_format(amount):
+    """
+    Compound numbers without hyphens.
+    Example: 25.10 → "twenty five dollars and ten cents"
+    """
+    # Get standard format then remove hyphens
+    standard = standard_format(amount)
+    return unhyphenate_compound(standard)
+
+
+@register_variation("with_and_in_numbers", weight=3.0)
+def with_and_in_numbers_format(amount):
+    """
+    Includes "and" in numbers over 100.
+    Example: 125.10 → "one hundred and twenty-five dollars and ten cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    result = []
+
+    # Handle dollars with "and" in numbers over 100
+    if dollars > 0:
+        dollar_words = format_large_number(dollars, use_and=True)
+        result.append(f"{dollar_words} {p.plural('dollar', dollars)}")
+
+    # Handle cents
+    if cents > 0:
+        if dollars > 0:
+            result.append("and")
+        cent_words = cents_to_words(cents)
+        result.append(f"{cent_words} {p.plural('cent', cents)}")
+
+    return " ".join(result)
+
+
+@register_variation("zero_cents_explicit", weight=2.0)
+def zero_cents_explicit_format(amount):
+    """
+    Explicitly states "zero cents".
+    Example: 25.00 → "twenty-five dollars and zero cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars and zero cents"
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Always append cents part, even if zero
+    if dollars > 0:
+        result.append("and")
+
+    if cents > 0:
+        result.append(cents_to_text(cents))
+    else:
+        result.append("zero cents")
+
+    return " ".join(result)
+
+
+@register_variation("even_dollars", weight=2.0)
+def even_dollars_format(amount):
+    """
+    Uses "even" for zero cents.
+    Example: 25.00 → "twenty-five dollars even"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Only use if there are dollars and no cents
+    if cents > 0 or dollars == 0:
+        return standard_format(amount)
+
+    return f"{dollars_to_text(dollars)} even"
+
+
+@register_variation("comma_instead_of_and", weight=2.0)
+def comma_instead_of_and_format(amount):
+    """
+    Uses a comma instead of "and".
+    Example: 25.10 → "twenty-five dollars, ten cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Handle cents part
+    if cents > 0:
+        if dollars > 0:
+            result.append(",")
+        result.append(cents_to_text(cents))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    return " ".join(result)
+
+
+@register_variation("ampersand", weight=1.5)
+def ampersand_format(amount):
+    """
+    Uses an ampersand (&) instead of "and".
+    Example: 25.10 → "twenty-five dollars & ten cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Handle cents part
+    if cents > 0:
+        if dollars > 0:
+            result.append("&")
+        result.append(cents_to_text(cents))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    return " ".join(result)
+
+
+@register_variation("with_preposition", weight=1.5)
+def with_preposition_format(amount):
+    """
+    Uses "with" instead of "and".
+    Example: 25.10 → "twenty-five dollars with ten cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Handle cents part
+    if cents > 0:
+        if dollars > 0:
+            result.append("with")
+        result.append(cents_to_text(cents))
+
+    # Special case for zero amount
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    return " ".join(result)
+
+
+@register_variation("formal_business", weight=2.0)
+def formal_business_format(amount):
+    """
+    A very formal phrasing, starting with "the sum of".
+    Example: 25478.90 → "the sum of twenty-five thousand four hundred seventy-eight dollars and ninety cents"
+    """
+    standard = standard_format(amount)
+    return f"the sum of {standard}"
+
+
+@register_variation("cents_only", weight=2.0)
+def cents_only_format(amount):
+    """
+    Express only in cents: "X cents" (only for amounts < 1.00)
+    Example: 0.75 → "seventy-five cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Only use this format for amounts less than $1.00
+    if dollars > 0:
+        return standard_format(amount)
+
+    if cents == 0:
+        return "zero cents"
+
+    return cents_to_text(cents)
+
+
+@register_variation("and_no_cents", weight=1.5)
+def and_no_cents_format(amount):
+    """
+    Uses "and no cents".
+    Example: 25.00 → "twenty-five dollars and no cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Only use if there are dollars and no cents
+    if cents > 0 or dollars == 0:
+        return standard_format(amount)
+
+    return f"{dollars_to_text(dollars)} and no cents"
+
+
+@register_variation("legal_document", weight=1.0)
+def legal_document_format(amount):
+    """
+    Includes the amount in parentheses after the words.
+    Example: 1250.75 → "one thousand two hundred fifty dollars and seventy-five cents ($1,250.75)"
+    """
+    standard = standard_format(amount)
+    formatted_amount = "${:,.2f}".format(amount)
+    return f"{standard} ({formatted_amount})"
+
+
+@register_variation("exactly", weight=2.0)
+def exact_amount_format(amount):
+    """
+    Includes "exactly" at the beginning.
+    Example: 8547.32 → "exactly eight thousand five hundred forty-seven dollars and thirty-two cents"
+    """
+    standard = standard_format(amount)
+    return f"exactly {standard}"
+
+
+@register_variation("hundreds_as_multiples", weight=1.0)
+def hundreds_as_multiples_format(amount):
+    """
+    Expresses hundreds as multiples (e.g., "fifteen hundred").
+    Example: 1500.00 → "fifteen hundred dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Only applicable for amounts between 1100 and 9900 (11 to 99 hundred)
+    if not (1100 <= dollars < 10000) or (dollars % 100 != 0):
+        return standard_format(amount)
+
+    # Express as X hundred
+    hundreds = dollars // 100
+    hundred_words = p.number_to_words(hundreds)
+
+    if cents == 0:
+        return f"{hundred_words} hundred dollars"
+    else:
+        cent_words = cents_to_words(cents)
+        return f"{hundred_words} hundred dollars and {cent_words} {p.plural('cent', cents)}"
+
+
+@register_variation("extra_commas", weight=1.0)
+def extra_commas_format(amount):
+    """
+    Inserts extra commas within the number words.
+    Example: 8765.43 → "eight thousand, seven hundred, sixty-five dollars, and forty-three cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    result = []
+
+    # Handle dollars with extra commas
+    if dollars > 0:
+        dollar_words = format_large_number(dollars, use_and=False, use_commas=True)
+        # Add extra commas
+        dollar_words = re.sub(r"(\w+) (\w+)", r"\1, \2", dollar_words)
+        result.append(f"{dollar_words} {p.plural('dollar', dollars)}")
+
+    # Handle cents
+    if cents > 0:
+        if dollars > 0:
+            result.append(",")
+            result.append("and")
+        cent_words = cents_to_words(cents)
+        result.append(f"{cent_words} {p.plural('cent', cents)}")
+
+    return " ".join(result)
+
+
+@register_variation("written_and_numeric", weight=1.0)
+def written_and_numeric_format(amount):
+    """
+    Repeats the amount parenthetically in numeric format.
+    Example: 5432.10 → "five thousand four hundred thirty-two and 10/100 dollars ($5,432.10)"
+    """
+    # Get fractional cents format
+    fractional = dollars_after_fraction_format(amount)
+    formatted_amount = "${:,.2f}".format(amount)
+    return f"{fractional} ({formatted_amount})"
+
+
+@register_variation("payment_of", weight=1.0)
+def payment_of_format(amount):
+    """
+    Begins with "payment of".
+    Example: 3456.78 → "payment of three thousand four hundred fifty-six and 78/100 dollars"
+    """
+    fractional = dollars_after_fraction_format(amount)
+    return f"payment of {fractional}"
+
+
+@register_variation("pay_to", weight=1.0)
+def pay_to_format(amount):
+    """
+    Uses the phrase "pay to the order of".
+    Example: 4321.98 → "pay to the order of four thousand three hundred twenty-one and 98/100 dollars"
+    """
+    fractional = dollars_after_fraction_format(amount)
+    return f"pay to the order of {fractional}"
+
+
+@register_variation("remittance", weight=0.8)
+def remittance_format(amount):
+    """
+    Begins with "remittance of".
+    Example: 5432.10 → "remittance of five thousand four hundred thirty-two and 10/100 dollars"
+    """
+    fractional = dollars_after_fraction_format(amount)
+    return f"remittance of {fractional}"
+
+
+@register_variation("funds_transfer", weight=0.8)
+def funds_transfer_format(amount):
+    """
+    Specifies a "transfer of funds".
+    Example: 9876.54 → "transfer of funds in the amount of nine thousand eight hundred seventy-six and 54/100 dollars"
+    """
+    fractional = dollars_after_fraction_format(amount)
+    return f"transfer of funds in the amount of {fractional}"
+
+
+@register_variation("dollars_and_xx_100", weight=5.0)
+def dollars_and_xx_100_format(amount):
+    """
+    Explicit "xx/100" for cents, even if zero.
+    Example: 25.00 → "twenty-five dollars and 00/100"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars and 00/100"
+
+    result = []
+
+    # Handle dollars part
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    # Always include fractional cents
+    if dollars > 0:
+        result.append("and")
+
+    result.append(f"{cents:02d}/100")
+
+    return " ".join(result)
+
+
+@register_variation("no_commas", weight=2.0)
+def no_commas_format(amount):
+    """
+    Omits commas in the written number.
+    Example: 1234567.89 → "one million two hundred thirty-four thousand five hundred sixty-seven dollars and eighty-nine cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    result = []
+
+    # Handle dollars with no commas
+    if dollars > 0:
+        dollar_words = format_large_number(dollars, use_and=False, use_commas=False)
+        result.append(f"{dollar_words} {p.plural('dollar', dollars)}")
+
+    # Handle cents
+    if cents > 0:
+        if dollars > 0:
+            result.append("and")
+        cent_words = cents_to_words(cents)
+        result.append(f"{cent_words} {p.plural('cent', cents)}")
+
+    return " ".join(result)
+
+
+@register_variation("parenthetical_cents", weight=0.8)
+def parenthetical_cents_format(amount):
+    """
+    Puts the cents in parentheses.
+    Example: 9876.54 → "nine thousand eight hundred seventy-six dollars (and fifty-four cents)"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    if dollars == 0:
+        return cents_to_text(cents)
+
+    result = f"{dollars_to_text(dollars)}"
+
+    if cents > 0:
+        cent_text = cents_to_text(cents)
+        result += f" (and {cent_text})"
+
+    return result
+
+
+@register_variation("amount_in_words", weight=0.8)
+def amount_in_words_format(amount):
+    """
+    Uses the prefix "amount in words:".
+    Example: 3456.78 → "amount in words: three thousand four hundred fifty-six and 78/100 dollars"
+    """
+    fractional = dollars_after_fraction_format(amount)
+    return f"amount in words: {fractional}"
+
+
+@register_variation("asterisk_bounded", weight=0.5)
+def asterisk_bounded_format(amount):
+    """
+    Surrounds the amount with asterisks.
+    Example: 5432.10 → "*five thousand four hundred thirty-two and 10/100 dollars*"
+    """
+    fractional = dollars_after_fraction_format(amount)
+    return f"*{fractional}*"
+
+
+@register_variation("no_dollars", weight=0.8)
+def no_dollars_format(amount):
+    """
+    Uses "no dollars" instead of "zero dollars".
+    Example: 0.50 → "no dollars and fifty cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars > 0:
+        return standard_format(amount)
+
+    if cents == 0:
+        return "no dollars"
+
+    return f"no dollars and {cents_to_text(cents)}"
+
+
+@register_variation("high_value_transaction", weight=0.5)
+def high_value_transaction_format(amount):
+    """
+    Precise format for very large amounts.
+    Example: 25000000.00 → "twenty-five million dollars and 00/100"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    # Only for truly large amounts
+    if dollars < 1000000:
+        return standard_format(amount)
+
+    dollar_words = format_large_number(dollars, use_and=True, use_commas=True)
+
+    if cents == 0:
+        return f"{dollar_words} dollars and 00/100"
+    else:
+        return f"{dollar_words} dollars and {cents:02d}/100"
+
+
+@register_variation("equals", weight=0.3)
+def equals_format(amount):
+    """
+    Uses "equals" to connect dollars and cents.
+    Example: 5678.90 → "five thousand six hundred seventy-eight dollars equals ninety cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    if dollars == 0:
+        return cents_to_text(cents)
+
+    if cents == 0:
+        return dollars_to_text(dollars)
+
+    return f"{dollars_to_text(dollars)} equals {cents_to_text(cents)}"
+
+
+@register_variation("personal_check_standard", weight=3.0)
+def personal_check_standard_format(amount):
+    """
+    Standard personal check format.
+    Example: 123.45 → "one hundred twenty-three and 45/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero and 00/100 dollars"
+
+    if dollars == 0:
+        return f"{cents:02d}/100 dollars"
+
+    dollar_words = dollars_to_words(dollars)
+    return f"{dollar_words} and {cents:02d}/100 dollars"
+
+
+@register_variation("bill_payment", weight=2.0)
+def bill_payment_format(amount):
+    """
+    Bill payment format (personal to business).
+    Example: 89.95 → "eighty-nine dollars and ninety-five cents only"
+    """
+    standard = standard_format(amount)
+    return f"{standard} only"
+
+
+@register_variation("donation_check", weight=1.5)
+def donation_check_format(amount):
+    """
+    Donation check format.
+    Example: 50.00 → "fifty dollars and 00/100"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars and 00/100"
+
+    result = []
+
+    if dollars > 0:
+        result.append(dollars_to_text(dollars))
+
+    result.append("and")
+    result.append(f"{cents:02d}/100")
+
+    return " ".join(result)
+
+
+# Add more variations here...
 
 
 def generate_random_amount(min_amount=0.01, max_amount=1000000.00):
@@ -103,89 +892,30 @@ def amount_to_verbal_expression(amount, variation_type=None):
     Args:
         amount (float): Monetary amount (must be non-negative)
         variation_type (str, optional): Type of variation to generate
-            ('standard', 'with_cents', 'cents_only', 'no_and', 'dollars_only')
-            If None, a random variation will be chosen.
+            If None, a random variation will be chosen based on weights.
 
     Returns:
-        str: Verbal expression of the monetary amount
+        tuple: (str, str) - (verbal expression of the monetary amount, variation name used)
 
     Raises:
-        ValueError: If amount is negative
+        ValueError: If amount is negative or variation_type is not recognized
     """
     # Validate that amount is non-negative
     if amount < 0:
         raise ValueError("amount must be non-negative (>= 0)")
 
-    dollars = int(amount)
-    cents = int(round((amount - dollars) * 100))
-
-    if variation_type is None:
-        # Choose a random variation based on the amount
-        # Only include 'cents_only' option when there are only cents (no dollars)
-        if dollars == 0 and cents > 0:
-            variation_type = random.choice(["cents_only", "standard"])
-        # Only include 'dollars_only' option when there are only dollars (no cents)
-        elif dollars > 0 and cents == 0:
-            variation_type = random.choice(["dollars_only", "standard", "with_cents"])
+    # If variation type is specified, use it
+    if variation_type is not None:
+        if variation_type in VARIATIONS:
+            return normalize_text(VARIATIONS[variation_type]["func"](amount)), variation_type
         else:
-            # Both dollars and cents
-            variation_type = random.choice(["standard", "no_and"])
+            raise ValueError(f"Unknown variation type: {variation_type}")
 
-    if variation_type == "standard":
-        # Standard format: "X dollars and Y cents" or just "X dollars" or just "Y cents"
-        return number_to_words(amount, include_and=True)
+    # Otherwise, choose a random variation based on weights
+    weights = [VARIATIONS[var_name]["weight"] for var_name in VARIATIONS]
+    variation_name = random.choices(list(VARIATIONS.keys()), weights=weights, k=1)[0]
 
-    elif variation_type == "with_cents":
-        # Explicitly mention zero cents: "X dollars and zero cents"
-        if dollars > 0:
-            dollar_words = number_to_words(dollars, include_and=False)
-            if cents == 0:
-                return f"{dollar_words} and zero cents"
-            else:
-                cent_words = number_to_words(cents / 100, include_and=False)
-                cent_words = cent_words.replace("point ", "")
-                return f"{dollar_words} and {cent_words}"
-        else:
-            # Just cents, no dollars
-            return number_to_words(amount, include_and=True)
-
-    elif variation_type == "cents_only":
-        # Express only in cents: "X cents" (only for amounts < 1.00)
-        if dollars == 0 and cents > 0:
-            p = inflect.engine()
-            cent_words = p.number_to_words(cents)
-            return f"{cent_words} cents"
-        else:
-            # Fallback to standard for amounts >= 1.00
-            return number_to_words(amount, include_and=True)
-
-    elif variation_type == "no_and":
-        # Omit the 'and': "X dollars Y cents"
-        return number_to_words(amount, include_and=False)
-
-    elif variation_type == "dollars_only":
-        # Express only in dollars: "X dollars" (for whole dollar amounts)
-        if cents == 0 and dollars > 0:
-            return f"{number_to_words(dollars, include_and=False)} dollars"
-        else:
-            # Fallback to standard if there are cents
-            return number_to_words(amount, include_and=True)
-
-    # Fallback to standard format
-    return number_to_words(amount, include_and=True)
-
-
-def create_json_output(amount):
-    """
-    Create a JSON representation of a monetary amount.
-
-    Args:
-        amount (float): Monetary amount
-
-    Returns:
-        str: JSON string representation
-    """
-    return format_json(amount)
+    return normalize_text(VARIATIONS[variation_name]["func"](amount)), variation_name
 
 
 def apply_augmentation(text, dropout_prob=0.05, case_change_prob=0.2):
@@ -259,7 +989,7 @@ def generate_examples(num_examples):
     examples = []
     for amount in amounts:
         # Generate verbal expression (with random variation)
-        verbal_expr = amount_to_verbal_expression(amount)
+        verbal_expr, variation_name = amount_to_verbal_expression(amount)
 
         # Apply augmentation to some examples
         if random.random() < 0.3:  # Apply augmentation to 30% of examples
@@ -274,11 +1004,26 @@ def generate_examples(num_examples):
             "target": json_output,
             # Store original amount for reference
             "amount": float(format(amount, ".2f")),
+            # Store the variation used
+            "variation": variation_name,
         }
 
         examples.append(example)
 
     return examples
+
+
+def create_json_output(amount):
+    """
+    Create a JSON representation of a monetary amount.
+
+    Args:
+        amount (float): Monetary amount
+
+    Returns:
+        str: JSON string representation
+    """
+    return format_json(amount)
 
 
 def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
@@ -336,7 +1081,24 @@ def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
     print(f"Training data saved to: {train_path}")
     print(f"Validation data saved to: {val_path}")
 
-    # Generate a sample of examples for inspection
+    # Analyze variation distribution
+    variation_count = {name: 0 for name in VARIATIONS.keys()}
+
+    for example in examples:
+        variation = example.get("variation", "unknown")
+        if variation in variation_count:
+            variation_count[variation] += 1
+        else:
+            variation_count["unknown"] = variation_count.get("unknown", 0) + 1
+
+    # Print variation distribution
+    print("\nVariation distribution:")
+    for var_name, count in sorted(variation_count.items(), key=lambda x: x[1], reverse=True):
+        if count > 0:
+            percentage = (count / num_examples) * 100
+            print(f"{var_name}: {count} examples ({percentage:.1f}%)")
+
+    # Sample examples for inspection
     sample_size = min(10, num_examples)
     sample_examples = random.sample(examples, sample_size)
 
@@ -346,6 +1108,7 @@ def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
         print(f"Input:  {example['input']}")
         print(f"Target: {example['target']}")
         print(f"Amount: ${example['amount']:.2f}")
+        print(f"Variation: {example['variation']}")
 
     return train_path, val_path
 
@@ -397,3 +1160,8 @@ if __name__ == "__main__":
     for range_name, count in amount_ranges.items():
         percentage = (count / num_examples) * 100
         print(f"{range_name}: {count} examples ({percentage:.1f}%)")
+
+    # Print a summary of all available variations
+    print("\nAvailable variations:")
+    for var_name, var_data in VARIATIONS.items():
+        print(f"- {var_name} (weight: {var_data['weight']})")

@@ -73,18 +73,20 @@ class TestAmountToVerbalExpression:
         "amount,variation,expected_substr",
         [
             (25.10, "standard", "twenty-five dollars and ten cents"),
-            (5.00, "dollars_only", "five dollars"),
+            (5.00, "only_dollars", "five dollars only"),
             (0.75, "cents_only", "seventy-five cents"),
             (100.01, "no_and", "one hundred dollars one cent"),
-            (42.00, "with_cents", "forty-two dollars and zero cents"),
+            (42.00, "zero_cents_explicit", "forty-two dollars and zero cents"),
             (1234.56, "standard", "one thousand, two hundred and thirty-four dollars and fifty-six cents"),
-            (10000.00, "dollars_only", "ten thousand dollars"),
+            (10000.00, "no_cents_specification", "ten thousand dollars"),
             (1.25, "standard", "one dollar and twenty-five cents"),
             (100.50, "standard", "one hundred dollars and fifty cents"),
         ],
     )
     def test_variation_types(self, amount, variation, expected_substr):
-        result = amount_to_verbal_expression(amount, variation_type=variation)
+        # The function now returns a tuple of (expression, variation_name)
+        result, variation_name = amount_to_verbal_expression(amount, variation_type=variation)
+        assert variation_name == variation
         assert expected_substr in result
 
     def test_negative_amount_handling(self):
@@ -98,8 +100,8 @@ class TestAmountToVerbalExpression:
         # Call multiple times to cover different random variations
         variations = set()
         for _ in range(100):
-            result = amount_to_verbal_expression(amount)
-            variations.add(result)
+            result, variation_name = amount_to_verbal_expression(amount)
+            variations.add(variation_name)
         # We should get at least 2 different variations
         assert len(variations) >= 2
 
@@ -158,6 +160,7 @@ class TestGenerateExamples:
             assert "input" in example
             assert "target" in example
             assert "amount" in example
+            assert "variation" in example  # Check for variation field
 
             # Check that target is valid JSON
             target_json = json.loads(example["target"])
@@ -165,6 +168,10 @@ class TestGenerateExamples:
 
             # Check that amount field matches JSON amount
             assert abs(example["amount"] - target_json["amount"]) < 1e-10
+
+            # Check that variation is a non-empty string
+            assert isinstance(example["variation"], str)
+            assert example["variation"] != ""
 
 
 class TestGenerateDataset:
