@@ -1064,7 +1064,7 @@ def generate_examples(num_examples, control_variation_distribution=True):
     return examples
 
 
-def create_target_output(amount, delimiter="|"):
+def create_target_output(amount):
     """
     Create a target output for a given amount.
     Returns a dictionary with 'dollars' and 'cents' as float values.
