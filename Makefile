@@ -1,4 +1,4 @@
-.PHONY: help test test-verbose test-integration test-slow test-all lint lint-fix format clean all generate-data train train-test evaluate inference inference-demo check-deps update-deps coverage build
+.PHONY: help test test-verbose test-integration test-slow test-all lint lint-fix format clean all generate-data train train-quick-test evaluate inference inference-demo check-deps update-deps coverage build
 
 # Default target when running 'make' without arguments
 help:
@@ -22,7 +22,7 @@ help:
 	@echo "Project-specific commands:"
 	@echo "  make generate-data        - Generate synthetic training data"
 	@echo "  make train                - Train the model"
-	@echo "  make train-test           - Run a quick test of the training pipeline"
+	@echo "  make train-quick-test     - Run a quick test of the training pipeline"
 	@echo "  make evaluate             - Evaluate the model"
 	@echo "  make inference            - Run inference with the model"
 	@echo "  make inference-demo       - Run the inference demo with example inputs"
@@ -76,8 +76,8 @@ train:
 	python -m main train
 
 # Run a quick test of the training pipeline
-train-test:
-	python -m main train --test-run
+train-quick-test:
+	python -m main train --quick-test
 
 # Evaluate the model
 evaluate:
