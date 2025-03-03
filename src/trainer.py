@@ -9,6 +9,7 @@ import os
 import evaluate
 import numpy as np
 import torch
+import wandb
 from Levenshtein import distance as levenshtein_distance
 from transformers import (
     AutoTokenizer,
@@ -18,7 +19,6 @@ from transformers import (
 )
 
 import config
-import wandb
 from src.dataset import prepare_dataset
 from src.inference import extract_amount
 from src.model import initialize_model, save_model

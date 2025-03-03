@@ -4,9 +4,9 @@ Inference module for using the trained model.
 
 import logging
 import re
-from logging import config
 from typing import List, Optional, Tuple
 
+import config
 from src.model import generate_text, load_model
 from src.utils import normalize_text
 

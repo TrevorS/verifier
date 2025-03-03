@@ -121,10 +121,11 @@ class TestInferencePipeline:
         mock_run_inference.return_value = "25|10"
 
         # Run the pipeline
-        result = inference_pipeline("twenty-five dollars and ten cents", "model/path")
+        amount, raw_output = inference_pipeline("twenty-five dollars and ten cents", "model/path")
 
         # Check the result
-        assert result == "25|10"
+        assert raw_output == "25|10"
+        assert amount is None  # Because our mocked output doesn't actually get parsed to a float
 
         # Check that the functions were called correctly
         mock_load_model.assert_called_once_with("model/path")
