@@ -23,14 +23,29 @@ from src.dataset import (
 def sample_data():
     """Create temporary sample data files."""
     train_data = [
-        {"input": "one hundred twenty-three dollars and forty-five cents", "target": "123|45"},
-        {"input": "five dollars", "target": "5|00"},
-        {"input": "seventy-five cents", "target": "0|75"},
+        {
+            "input": "one hundred twenty-three dollars and forty-five cents", 
+            "target": {"dollars": 123.0, "cents": 45.0}
+        },
+        {
+            "input": "five dollars", 
+            "target": {"dollars": 5.0, "cents": 0.0}
+        },
+        {
+            "input": "seventy-five cents", 
+            "target": {"dollars": 0.0, "cents": 75.0}
+        },
     ]
 
     val_data = [
-        {"input": "two thousand dollars", "target": "2000|00"},
-        {"input": "one dollar and one cent", "target": "1|01"},
+        {
+            "input": "two thousand dollars", 
+            "target": {"dollars": 2000.0, "cents": 0.0}
+        },
+        {
+            "input": "one dollar and one cent", 
+            "target": {"dollars": 1.0, "cents": 1.0}
+        },
     ]
 
     with tempfile.TemporaryDirectory() as temp_dir:

@@ -548,25 +548,55 @@ class MonetaryAmountDataCollator:
         self.tokenizer = tokenizer
 
     def __call__(self, features):
-        # First, separate the inputs and targets
-        input_texts = [f["input"] for f in features]
+        # Debug the features structure
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Features keys: {list(features[0].keys())}")
         
-        # Create a batch of 2 values per example: [dollars, cents]
-        labels = torch.tensor(
-            [[f["target"]["dollars"], f["target"]["cents"]] for f in features],
-            dtype=torch.float32  # Explicitly use float32
-        )
-
-        # Tokenize all the texts together
-        batch = self.tokenizer(
-            input_texts,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        )
-
-        # Add the targets
-        batch["labels"] = labels
+        # First, separate the inputs and targets
+        # Check if we're getting tokenized inputs or raw inputs
+        if "input_ids" in features[0]:
+            # Already tokenized inputs
+            batch = {
+                k: torch.tensor([f[k] for f in features]) 
+                for k in features[0].keys() 
+                if k not in ["target", "labels"]
+            }
+            
+            # Check if labels are available in the features
+            if "labels" in features[0]:
+                # Labels are already in the correct format
+                batch["labels"] = torch.tensor([f["labels"] for f in features], dtype=torch.float32)
+            elif "target" in features[0]:
+                # Create a batch of 2 values per example: [dollars, cents]
+                labels = torch.tensor(
+                    [[f["target"]["dollars"], f["target"]["cents"]] for f in features],
+                    dtype=torch.float32  # Explicitly use float32
+                )
+                # Add the targets
+                batch["labels"] = labels
+            else:
+                # If we're in evaluation mode without targets, don't add labels
+                logger.warning("No target or labels found in features")
+        else:
+            # Raw inputs need tokenization
+            input_texts = [f["input"] for f in features]
+            batch = self.tokenizer(
+                input_texts,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+            )
+            
+            # Check if target is available in the features
+            if "target" in features[0]:
+                # Create a batch of 2 values per example: [dollars, cents]
+                labels = torch.tensor(
+                    [[f["target"]["dollars"], f["target"]["cents"]] for f in features],
+                    dtype=torch.float32  # Explicitly use float32
+                )
+                # Add the targets
+                batch["labels"] = labels
 
         return batch
 

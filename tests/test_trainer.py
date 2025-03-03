@@ -30,12 +30,12 @@ logger = logging.getLogger(__name__)
 def sample_data():
     """Create temporary sample data files for training tests."""
     examples = [
-        ("twenty-five dollars and ten cents", "25|10"),
-        ("five dollars", "5|00"),
-        ("seventy-five cents", "0|75"),
-        ("twelve dollars and fifty cents", "12|50"),
-        ("one million dollars", "1000000|00"),
-        ("three euros and twenty cents", "3|20"),
+        ("twenty-five dollars and ten cents", {"dollars": 25.0, "cents": 10.0}),
+        ("five dollars", {"dollars": 5.0, "cents": 0.0}),
+        ("seventy-five cents", {"dollars": 0.0, "cents": 75.0}),
+        ("twelve dollars and fifty cents", {"dollars": 12.0, "cents": 50.0}),
+        ("one million dollars", {"dollars": 1000000.0, "cents": 0.0}),
+        ("three euros and twenty cents", {"dollars": 3.0, "cents": 20.0}),
     ]
 
     num_examples = 20
