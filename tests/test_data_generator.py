@@ -146,11 +146,15 @@ class TestGenerateExamples:
             assert "amount" in example
             assert "variation" in example  # Check for variation field
 
-            # Check that amount field matches JSON amount
-            amount = example["target"].replace("|", ".")
-            amount = float(amount)
-            # TODO: This is a hack to account for floating point precision issues
-            assert abs(example["amount"] - amount) < 2
+            # Check target format
+            assert "dollars" in example["target"]
+            assert "cents" in example["target"]
+            assert isinstance(example["target"]["dollars"], float)
+            assert isinstance(example["target"]["cents"], float)
+
+            # Check that amount field matches target values
+            expected_amount = example["target"]["dollars"] + (example["target"]["cents"] / 100)
+            assert abs(example["amount"] - expected_amount) < 1e-10
 
             # Check that variation is a non-empty string
             assert isinstance(example["variation"], str)
@@ -192,30 +196,41 @@ class TestGenerateDataset:
                 assert "input" in example
                 assert "target" in example
                 assert "amount" in example
+                
+                # Check target format
+                assert "dollars" in example["target"]
+                assert "cents" in example["target"]
+                assert isinstance(example["target"]["dollars"], float)
+                assert isinstance(example["target"]["cents"], float)
+
+                # Check that amount field matches target values
+                expected_amount = example["target"]["dollars"] + (example["target"]["cents"] / 100)
+                assert abs(example["amount"] - expected_amount) < 1e-10
 
 
 class TestCreateTargetOutput:
     @pytest.mark.parametrize(
-        "amount,expected_target",
+        "amount,expected_dollars,expected_cents",
         [
-            (3.07, "3|07"),  # Example 1
-            (5929.70, "5929|70"),  # Example 2
-            (7.82, "7|82"),  # Example 3
-            (68397.46, "68397|46"),  # Example 4
-            (8.68, "8|68"),  # Example 5
+            (3.07, 3.0, 7.0),  # Example 1
+            (5929.70, 5929.0, 70.0),  # Example 2
+            (7.82, 7.0, 82.0),  # Example 3
+            (68397.46, 68397.0, 46.0),  # Example 4
+            (8.68, 8.0, 68.0),  # Example 5
             # Edge cases
-            (0.01, "0|01"),
-            (0.001, "0|00"),  # Rounds down to 0 cents
-            (0.995, "1|00"),  # Rounds up to a dollar
-            (9.995, "10|00"),  # Rounds up and changes dollar digit
+            (0.01, 0.0, 1.0),
+            (0.001, 0.0, 0.0),  # Rounds down to 0 cents
+            (0.995, 1.0, 0.0),  # Rounds up to a dollar
+            (9.995, 10.0, 0.0),  # Rounds up and changes dollar digit
         ],
     )
-    def test_target_output_matches_displayed_amount(self, amount, expected_target):
+    def test_target_output_matches_displayed_amount(self, amount, expected_dollars, expected_cents):
         # Verify that the target matches what we expect for the formatted amount
         target = create_target_output(amount)
 
         # Test our target is correct
-        assert target == expected_target
+        assert target["dollars"] == expected_dollars
+        assert target["cents"] == expected_cents
 
         # Double-check by manually calculating what should be in target using the same algorithm
         # as in create_target_output
@@ -240,5 +255,5 @@ class TestCreateTargetOutput:
             dollars += 1
             cents = 0
 
-        expected = f"{dollars}|{cents:02d}"
-        assert target == expected
+        assert target["dollars"] == float(dollars)
+        assert target["cents"] == float(cents)

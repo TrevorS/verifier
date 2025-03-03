@@ -77,7 +77,7 @@ train:
 
 # Run a quick test of the training pipeline
 train-test:
-	python -m main train --test-run
+	python -m main train --quick-test
 
 # Evaluate the model
 evaluate:

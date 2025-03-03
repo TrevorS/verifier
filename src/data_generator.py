@@ -975,14 +975,14 @@ def apply_augmentation(text, dropout_prob=0.05, case_change_prob=0.2):
 
 def generate_examples(num_examples, control_variation_distribution=True):
     """
-    Generate examples of verbal monetary expressions and their JSON representations.
+    Generate examples of verbal monetary expressions and their target values.
 
     Args:
         num_examples (int): Number of examples to generate
         control_variation_distribution (bool): Whether to manually control variation distribution
 
     Returns:
-        list: List of dictionaries with input and target fields
+        list: List of dictionaries with input and target fields, where target contains dollars and cents as floats
     """
     # Generate stratified amounts
     amounts = generate_stratified_amounts(num_examples)
@@ -1034,9 +1034,15 @@ def generate_examples(num_examples, control_variation_distribution=True):
             # Generate verbal expression
             verbal_expr, _ = amount_to_verbal_expression(amount, variation_type=variation)
 
-            # Create example
+            # Create example with new target format
+            target = create_target_output(amount)
             examples.append(
-                {"input": verbal_expr, "target": create_target_output(amount), "amount": float(format(amount, ".2f")), "variation": variation}
+                {
+                    "input": verbal_expr,
+                    "target": target,
+                    "amount": float(format(amount, ".2f")),
+                    "variation": variation
+                }
             )
     else:
         # Original approach - random selection based on weights
@@ -1044,11 +1050,12 @@ def generate_examples(num_examples, control_variation_distribution=True):
             # Generate verbal expression (with random variation)
             verbal_expr, variation_name = amount_to_verbal_expression(amount)
 
-            # Create example
+            # Create example with new target format
+            target = create_target_output(amount)
             examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_target_output(amount),
+                    "target": target,
                     "amount": float(format(amount, ".2f")),
                     "variation": variation_name,
                 }
@@ -1060,6 +1067,7 @@ def generate_examples(num_examples, control_variation_distribution=True):
 def create_target_output(amount, delimiter="|"):
     """
     Create a target output for a given amount.
+    Returns a dictionary with 'dollars' and 'cents' as float values.
     """
     # Handle special values like 9.995 that should round up to 10.00
     # First check if we're close to a value that would round up to the next dollar
@@ -1086,10 +1094,10 @@ def create_target_output(amount, delimiter="|"):
         dollars += 1
         cents = 0
 
-    dollars = str(dollars)
-    cents = f"{cents:02d}"
-
-    return delimiter.join([dollars, cents])
+    return {
+        "dollars": float(dollars),
+        "cents": float(cents)
+    }
 
 
 def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
@@ -1362,7 +1370,7 @@ def display_sample_examples(dataset, num_examples=5):
 
             print(f"\nExample {i + 1}:")
             print(f"Input: {example['input']}")
-            print(f"Target: {example['target']}")
+            print(f"Target: dollars={example['target']['dollars']:.1f}, cents={example['target']['cents']:.1f}")
             print(f"Amount: ${example['amount']:.2f}")
             print(f"Variation: {example['variation']}")
             print(f"Amount Range: {example['amount_range']}")
@@ -1404,11 +1412,12 @@ def generate_hard_examples(num_hard_examples=500):
             # Generate verbal expression
             verbal_expr, _ = amount_to_verbal_expression(amount, variation_type=variation)
 
-            # Create example
+            # Create example with new target format
+            target = create_target_output(amount)
             hard_examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_target_output(amount),
+                    "target": target,
                     "amount": float(format(amount, ".2f")),
                     "variation": variation,
                     "hard_example": True,  # Mark as hard example
