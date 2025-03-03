@@ -13,7 +13,6 @@ import pytest
 import config
 from src.trainer import (
     configure_training_args,
-    is_valid_json,
     setup_trainer,
     train_model,
 )
@@ -31,16 +30,12 @@ logger = logging.getLogger(__name__)
 def sample_data():
     """Create temporary sample data files for training tests."""
     examples = [
-        ("twenty-five dollars and ten cents", {"amount": 25.10, "currency": "USD"}),
-        ("five dollars", {"amount": 5.00, "currency": "USD"}),
-        ("one hundred euros", {"amount": 100.00, "currency": "EUR"}),
-        ("seventy-five cents", {"amount": 0.75, "currency": "USD"}),
-        ("two thousand three hundred yen", {"amount": 2300.00, "currency": "JPY"}),
-        ("fifty british pounds", {"amount": 50.00, "currency": "GBP"}),
-        ("twelve dollars and fifty cents", {"amount": 12.50, "currency": "USD"}),
-        ("one million dollars", {"amount": 1000000.00, "currency": "USD"}),
-        ("three euros and twenty cents", {"amount": 3.20, "currency": "EUR"}),
-        ("seven hundred fifty canadian dollars", {"amount": 750.00, "currency": "CAD"}),
+        ("twenty-five dollars and ten cents", "25|10"),
+        ("five dollars", "5|00"),
+        ("seventy-five cents", "0|75"),
+        ("twelve dollars and fifty cents", "12|50"),
+        ("one million dollars", "1000000|00"),
+        ("three euros and twenty cents", "3|20"),
     ]
 
     num_examples = 20
@@ -53,12 +48,12 @@ def sample_data():
     # Generate training data
     for i in range(train_size):
         example_idx = i % len(examples)
-        train_data.append({"input": examples[example_idx][0], "target": json.dumps(examples[example_idx][1])})
+        train_data.append({"input": examples[example_idx][0], "target": examples[example_idx][1]})
 
     # Generate validation data
     for i in range(val_size):
         example_idx = i % len(examples)
-        val_data.append({"input": examples[example_idx][0], "target": json.dumps(examples[example_idx][1])})
+        val_data.append({"input": examples[example_idx][0], "target": examples[example_idx][1]})
 
     with tempfile.TemporaryDirectory() as temp_dir:
         train_path = Path(temp_dir) / "train_sample.jsonl"
@@ -78,17 +73,6 @@ def sample_data():
         logger.info(f"Created sample validation data: {val_path} ({len(val_data)} examples)")
 
         yield {"train_path": train_path, "val_path": val_path, "output_dir": output_dir, "temp_dir": temp_dir}
-
-
-def test_is_valid_json():
-    """Test the JSON validation function."""
-    # Test valid JSON
-    assert is_valid_json('{"amount": 25.10, "currency": "USD"}') is True
-
-    # Test invalid JSON
-    assert is_valid_json('{"amount": 25.10, "currency": "USD"') is False
-    assert is_valid_json("not json at all") is False
-    assert is_valid_json("") is False
 
 
 def test_configure_training_args():

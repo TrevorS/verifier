@@ -2,10 +2,10 @@
 Inference module for using the trained model.
 """
 
-import json
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from logging import config
+from typing import List, Optional, Tuple
 
 from src.model import generate_text, load_model
 from src.utils import normalize_text
@@ -32,7 +32,7 @@ def prepare_input(text: str, add_instruction_prefix: bool = True) -> str:
 
     # Add instruction prefix to match training format if requested
     if add_instruction_prefix:
-        normalized_text = f"Convert to JSON: {normalized_text}"
+        normalized_text = f"{config.INSTRUCTION_PREFIX}: {normalized_text}"
 
     return normalized_text
 
@@ -86,109 +86,28 @@ def run_model_inference(model, tokenizer, input_text: str, use_greedy_decoding: 
         return ""
 
 
-def extract_json_from_output(output_text: str) -> str:
+def extract_amount(output_text: str) -> Optional[float]:
     """
-    Extract JSON string from model output, handling potential text wrapping.
+    Parse the numeric amount from the model output.
 
     Args:
-        output_text (str): Raw model output
-
-    Returns:
-        str: Extracted JSON string
-    """
-    # Remove any leading/trailing whitespace
-    output_text = output_text.strip()
-
-    # Try to extract JSON using regex (finding text between { and })
-    json_pattern = r"(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})"
-    json_matches = re.findall(json_pattern, output_text)
-
-    if json_matches:
-        return json_matches[0]  # Return the first JSON-like string found
-
-    return output_text  # Return as is if no JSON pattern found
-
-
-def validate_json(json_str: str) -> Tuple[bool, Optional[Dict]]:
-    """
-    Validate that the string is proper JSON and has expected fields.
-
-    Args:
-        json_str (str): JSON string to validate
-
-    Returns:
-        tuple: (is_valid, parsed_json_object)
-    """
-    try:
-        # Try to parse as JSON
-        json_obj = json.loads(json_str)
-
-        # Check for required fields
-        required_fields = ["amount", "currency"]
-        if all(field in json_obj for field in required_fields):
-            return True, json_obj
-        else:
-            missing = [field for field in required_fields if field not in json_obj]
-            logger.warning(f"JSON missing required fields: {missing}")
-            return False, json_obj
-
-    except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse as JSON: {json_str}. Error: {str(e)}")
-        return False, None
-
-
-def parse_amount(json_obj: Optional[Dict]) -> Optional[float]:
-    """
-    Parse the numeric amount from a JSON object.
-
-    Args:
-        json_obj (dict): Parsed JSON object
+        output_text (str): Raw model output (pipe-delimited numeric amount)
 
     Returns:
         float: Parsed amount, or None if invalid
     """
-    if json_obj is None:
-        return None
-
-    try:
-        if "amount" in json_obj:
-            amount_value = json_obj["amount"]
-            # Convert string to float if needed
-            if isinstance(amount_value, str):
-                # Remove any currency symbols or commas
-                clean_amount = re.sub(r"[^\d.-]", "", amount_value)
-                return float(clean_amount)
-            elif isinstance(amount_value, (int, float)):
-                return float(amount_value)
-        return None
-    except (ValueError, TypeError) as e:
-        logger.warning(f"Failed to parse amount: {str(e)}")
-        return None
+    # dollars|cents
+    # Extract the amount from the output text
+    amount_match = re.search(r"amount=(\d+)", output_text)
+    if amount_match:
+        amount_str = amount_match.group(1)
+        try:
+            return float(amount_str)
+        except ValueError:
+            return None
 
 
-def post_process_output(output_text: str) -> Tuple[str, Optional[Dict], bool, Optional[float]]:
-    """
-    Post-process the model output to extract and validate JSON.
-
-    Args:
-        output_text (str): Raw model output
-
-    Returns:
-        tuple: (json_string, parsed_json_object, is_valid, parsed_amount)
-    """
-    # Extract JSON from output
-    json_str = extract_json_from_output(output_text)
-
-    # Validate JSON structure
-    is_valid, json_obj = validate_json(json_str)
-
-    # Parse amount if JSON is valid
-    amount = parse_amount(json_obj) if json_obj else None
-
-    return json_str, json_obj, is_valid, amount
-
-
-def inference_pipeline(text: str, model_path: str) -> Tuple[str, Optional[Dict], bool, Optional[float], str]:
+def inference_pipeline(text: str, model_path: str) -> Tuple[Optional[float], str]:
     """
     Complete inference pipeline for processing a verbal monetary expression.
 
@@ -197,7 +116,7 @@ def inference_pipeline(text: str, model_path: str) -> Tuple[str, Optional[Dict],
         model_path (str): Path to the trained model
 
     Returns:
-        tuple: (json_string, parsed_json_object, is_valid, parsed_amount, raw_output)
+        tuple: (parsed_amount, raw_output)
     """
     # Load model and tokenizer
     model, tokenizer, metadata = load_model(model_path)
@@ -212,15 +131,15 @@ def inference_pipeline(text: str, model_path: str) -> Tuple[str, Optional[Dict],
     logger.info(f"Raw model output for input '{text}': {raw_output}")
 
     # Post-process output
-    json_str, json_obj, is_valid, amount = post_process_output(raw_output)
+    amount = extract_amount(raw_output)
 
     # Log result
-    if is_valid:
-        logger.info(f"Successfully processed: '{text}' -> {json_str}")
+    if amount:
+        logger.info(f"Successfully processed: '{text}' -> {amount}")
     else:
-        logger.warning(f"Failed to generate valid JSON for: '{text}' -> {raw_output}")
+        logger.warning(f"Failed to generate valid amount for: '{text}' -> {raw_output}")
 
-    return json_str, json_obj, is_valid, amount, raw_output
+    return amount, raw_output
 
 
 def run_inference(model_path, texts):
@@ -232,7 +151,7 @@ def run_inference(model_path, texts):
         texts (list or str): Input text(s) to process
 
     Returns:
-        list: List of JSON results
+        list: List of amounts
     """
     # Ensure texts is a list
     if isinstance(texts, str):
@@ -254,10 +173,10 @@ def run_inference(model_path, texts):
         logger.info(f"Raw model output for input '{text}': {prediction}")
 
         # Post-process output
-        json_str, json_obj, is_valid, amount = post_process_output(prediction)
+        amount = extract_amount(prediction)
 
         # Add to results
-        results.append(json_str)
+        results.append(amount)
 
     return results
 
@@ -289,17 +208,10 @@ def demo_inference(model_path: str):
     for example in examples:
         print(f"Input: {example}")
         # Using the full inference pipeline which will add the instruction prefix
-        json_str, json_obj, is_valid, amount, raw_output = inference_pipeline(example, model_path)
+        amount, raw_output = inference_pipeline(example, model_path)
 
         print(f"Raw model output: {raw_output}")
-        print(f"Output JSON: {json_str}")
-        if is_valid:
-            print(f"Parsed object: {json_obj}")
-            print(f"Amount value: {amount}")
-            if json_obj.get("currency"):
-                print(f"Currency: {json_obj['currency']}")
-        else:
-            print("Invalid JSON output")
+        print(f"Amount value: {amount}")
         print("-" * 40)
 
     print("\nDemo completed.")
@@ -329,16 +241,10 @@ if __name__ == "__main__":
             print(f"Output: {result}")
             print()
     elif args.text:
-        json_str, json_obj, is_valid, amount, raw_output = inference_pipeline(args.text, args.model_path)
+        amount, raw_output = inference_pipeline(args.text, args.model_path)
         print(f"Input: {args.text}")
-        print(f"Output JSON: {json_str}")
-        if is_valid:
-            print(f"Parsed object: {json_obj}")
-            print(f"Amount value: {amount}")
-            if json_obj and json_obj.get("currency"):
-                print(f"Currency: {json_obj['currency']}")
-        else:
-            print("Invalid JSON output")
+        print(f"Output: {raw_output}")
+        print(f"Amount value: {amount}")
     else:
         print("Error: Must provide --text, --file, or --demo")
         sys.exit(1)

@@ -1,5 +1,5 @@
 """
-Configuration settings for the monetary expressions to JSON converter model.
+Configuration settings for the monetary expressions to numeric amount converter.
 """
 
 import logging
@@ -61,6 +61,8 @@ MAX_NEW_TOKENS = 32
 NUM_BEAMS = 4  # Using beam search instead of greedy decoding for better results
 
 # Logging
-WANDB_PROJECT = "monetary-expressions-to-json"
+WANDB_PROJECT = "monetary-expressions-to-numeric-amount"
 WANDB_ENTITY = None  # Set to your wandb username or team name
 LOG_LEVEL = "INFO"
+
+INSTRUCTION_PREFIX = "Convert to pipe-delimited numeric amount"

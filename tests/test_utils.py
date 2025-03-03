@@ -1,8 +1,6 @@
-import json
-
 import pytest
 
-from src.utils import format_json, normalize_text, number_to_words
+from src.utils import normalize_text, number_to_words
 
 
 class TestNormalizeText:
@@ -15,28 +13,6 @@ class TestNormalizeText:
 
     def test_combined_normalization(self):
         assert normalize_text("  HELLO   WORLD  ") == "hello world"
-
-
-class TestFormatJSON:
-    def test_integer_amount(self):
-        result = format_json(5)
-        parsed = json.loads(result)
-        assert parsed["amount"] == 5.0
-
-    def test_decimal_amount(self):
-        result = format_json(25.1)
-        parsed = json.loads(result)
-        assert parsed["amount"] == 25.1
-
-    def test_two_decimal_precision(self):
-        result = format_json(100.015)  # Should round to 100.02
-        parsed = json.loads(result)
-        assert parsed["amount"] == 100.02
-
-    def test_zero_amount(self):
-        result = format_json(0)
-        parsed = json.loads(result)
-        assert parsed["amount"] == 0.0
 
 
 class TestNumberToWords:

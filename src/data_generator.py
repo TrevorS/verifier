@@ -12,7 +12,7 @@ from pathlib import Path
 import inflect
 import numpy as np
 
-from src.utils import format_json, normalize_text
+from src.utils import normalize_text
 
 # Create a global inflect engine for use across all variation functions
 p = inflect.engine()
@@ -1036,7 +1036,7 @@ def generate_examples(num_examples, control_variation_distribution=True):
 
             # Create example
             examples.append(
-                {"input": verbal_expr, "target": create_json_output(amount), "amount": float(format(amount, ".2f")), "variation": variation}
+                {"input": verbal_expr, "target": create_target_output(amount), "amount": float(format(amount, ".2f")), "variation": variation}
             )
     else:
         # Original approach - random selection based on weights
@@ -1048,7 +1048,7 @@ def generate_examples(num_examples, control_variation_distribution=True):
             examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_json_output(amount),
+                    "target": create_target_output(amount),
                     "amount": float(format(amount, ".2f")),
                     "variation": variation_name,
                 }
@@ -1057,17 +1057,18 @@ def generate_examples(num_examples, control_variation_distribution=True):
     return examples
 
 
-def create_json_output(amount):
+def create_target_output(amount, delimiter="|"):
     """
-    Create a JSON representation of a monetary amount.
-
-    Args:
-        amount (float): Monetary amount
-
-    Returns:
-        str: JSON string representation
+    Create a target output for a given amount.
     """
-    return format_json(amount)
+    # Convert amount to dollars and cents
+    dollars = int(amount)
+    cents = int((amount - dollars) * 100)
+
+    dollars = str(dollars)
+    cents = f"{cents:02d}"
+
+    return delimiter.join([dollars, cents])
 
 
 def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
@@ -1386,7 +1387,7 @@ def generate_hard_examples(num_hard_examples=500):
             hard_examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_json_output(amount),
+                    "target": create_target_output(amount),
                     "amount": float(format(amount, ".2f")),
                     "variation": variation,
                     "hard_example": True,  # Mark as hard example

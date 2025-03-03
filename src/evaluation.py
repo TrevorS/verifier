@@ -70,7 +70,7 @@ def evaluate_model(model_path, test_data_path=None, output_dir=None):
         # Generate prediction
         prediction = generate_text(model, tokenizer, input_text)
 
-        # Parse JSON and calculate metrics
+        # Calculate metrics
         result = analyze_prediction(input_text, expected_output, prediction, expected_amount)
         results.append(result)
 
@@ -97,8 +97,8 @@ def analyze_prediction(input_text, expected_output, prediction, expected_amount=
 
     Args:
         input_text (str): Input text
-        expected_output (str): Expected output (JSON string)
-        prediction (str): Model prediction (JSON string)
+        expected_output (str): Expected output (pipe-delimited numeric amount)
+        prediction (str): Model prediction (pipe-delimited numeric amount)
         expected_amount (float, optional): Expected amount if available
 
     Returns:
@@ -107,50 +107,31 @@ def analyze_prediction(input_text, expected_output, prediction, expected_amount=
     # Calculate exact match
     exact_match = prediction.strip() == expected_output.strip()
 
-    # Parse JSON
+    # Parse amounts
     try:
-        expected_json = json.loads(expected_output)
-        predicted_json = json.loads(prediction)
-        json_valid = True
-
-        # Extract amounts
-        if expected_amount is None and "amount" in expected_json:
-            expected_amount = expected_json["amount"]
-
-        if "amount" in predicted_json:
-            predicted_amount = predicted_json["amount"]
-            amount_diff = abs(expected_amount - predicted_amount) if expected_amount is not None else None
-            relative_diff = (amount_diff / expected_amount) if expected_amount != 0 else float("inf")
-        else:
-            predicted_amount = None
-            amount_diff = None
-            relative_diff = None
-
-        # Determine error type
-        if exact_match:
-            error_type = "none"
-        elif amount_diff == 0:
-            error_type = "formatting"
-        elif amount_diff is not None:
-            error_type = "value_error"
-        else:
-            error_type = "json_structure"
-
-    except (json.JSONDecodeError, ValueError, TypeError, KeyError):
-        json_valid = False
-        predicted_amount = None
+        expected_amount = float(expected_output)
+        predicted_amount = float(prediction)
+        amount_diff = abs(expected_amount - predicted_amount) if expected_amount is not None else None
+        relative_diff = (amount_diff / expected_amount) if expected_amount != 0 else float("inf")
+    except (ValueError, TypeError):
         amount_diff = None
         relative_diff = None
-        error_type = "json_invalid"
+
+    # Determine error type
+    if exact_match:
+        error_type = "none"
+    elif amount_diff == 0:
+        error_type = "formatting"
+    elif amount_diff is not None:
+        error_type = "value_error"
+    else:
+        error_type = "structure"
 
     return {
         "input": input_text,
         "expected_output": expected_output,
         "prediction": prediction,
         "exact_match": exact_match,
-        "json_valid": json_valid,
-        "expected_amount": expected_amount,
-        "predicted_amount": predicted_amount,
         "amount_diff": amount_diff,
         "relative_diff": relative_diff,
         "error_type": error_type,
@@ -174,10 +155,6 @@ def calculate_metrics(results):
     exact_matches = sum(result["exact_match"] for result in results)
     exact_match_accuracy = exact_matches / total_examples if total_examples > 0 else 0
 
-    # Count valid JSON
-    valid_json = sum(result["json_valid"] for result in results)
-    json_validity = valid_json / total_examples if total_examples > 0 else 0
-
     # Calculate amount differences
     amount_diffs = [result["amount_diff"] for result in results if result["amount_diff"] is not None]
     mean_amount_diff = np.mean(amount_diffs) if amount_diffs else "Infinity"  # Use string instead of float("inf")
@@ -197,14 +174,12 @@ def calculate_metrics(results):
         "none": error_types.count("none"),
         "formatting": error_types.count("formatting"),
         "value_error": error_types.count("value_error"),
-        "json_structure": error_types.count("json_structure"),
-        "json_invalid": error_types.count("json_invalid"),
+        "structure": error_types.count("structure"),
     }
 
     return {
         "total_examples": total_examples,
         "exact_match_accuracy": exact_match_accuracy,
-        "json_validity": json_validity,
         "mean_amount_diff": mean_amount_diff,
         "median_amount_diff": median_amount_diff,
         "mean_relative_diff": mean_relative_diff,
@@ -334,8 +309,8 @@ def analyze_specific_example(result):
         "error_type": result["error_type"],
     }
 
-    # For valid JSON predictions, highlight differences
-    if result["json_valid"] and not result["exact_match"]:
+    # Highlight differences
+    if not result["exact_match"]:
         analysis["expected_amount"] = result["expected_amount"]
         analysis["predicted_amount"] = result["predicted_amount"]
 
@@ -369,8 +344,7 @@ def create_visualizations(results, output_dir):
             "No Error": error_types.count("none"),
             "Formatting": error_types.count("formatting"),
             "Value Error": error_types.count("value_error"),
-            "JSON Structure": error_types.count("json_structure"),
-            "Invalid JSON": error_types.count("json_invalid"),
+            "Structure": error_types.count("structure"),
         }
 
         plt.pie(
@@ -457,8 +431,7 @@ def create_visualizations(results, output_dir):
         "No Error": error_types.count("none"),
         "Formatting": error_types.count("formatting"),
         "Value Error": error_types.count("value_error"),
-        "JSON Structure": error_types.count("json_structure"),
-        "Invalid JSON": error_types.count("json_invalid"),
+        "Structure": error_types.count("structure"),
     }
 
     plt.figure(figsize=(10, 8))
@@ -568,7 +541,6 @@ def generate_evaluation_report(results, metrics, output_dir):
         f.write("## Overall Metrics\n\n")
         f.write(f"- **Total examples**: {metrics['total_examples']}\n")
         f.write(f"- **Exact match accuracy**: {format_value(metrics['exact_match_accuracy'])}\n")
-        f.write(f"- **JSON validity**: {format_value(metrics['json_validity'])}\n")
         f.write(f"- **Amount accuracy (diff ≤ 0.01)**: {format_value(metrics['amount_accuracy'])}\n")
         f.write(f"- **Mean amount difference**: {format_value(metrics['mean_amount_diff'])}\n")
         f.write(f"- **Median amount difference**: {format_value(metrics['median_amount_diff'])}\n")
@@ -629,7 +601,7 @@ def generate_evaluation_report(results, metrics, output_dir):
                 f.write(f"- Expected: `{example['expected_output']}`\n")
                 f.write(f"- Predicted: `{example['prediction']}`\n")
 
-                if example["json_valid"] and example["amount_diff"] is not None:
+                if example["amount_diff"] is not None:
                     f.write(f"- Expected amount: {example['expected_amount']}\n")
                     f.write(f"- Predicted amount: {example['predicted_amount']}\n")
                     f.write(f"- Difference: {format_value(example['amount_diff'])}\n")
@@ -660,11 +632,8 @@ def generate_evaluation_report(results, metrics, output_dir):
         if metrics.get("common_error_patterns", {}).get("misspellings", {}).get("accuracy", 1.0) < 0.9:
             f.write("3. **Enhance robustness to spelling errors**: The model's performance drops with misspelled inputs.\n")
 
-        if metrics["json_validity"] < 0.98:
-            f.write("4. **Improve JSON formatting**: Ensure the model consistently produces valid JSON output.\n")
-
-        f.write("5. **Additional training data**: Consider generating more diverse training examples.\n")
-        f.write("6. **Model size**: Experiment with larger model sizes if resources permit.\n")
+        f.write("4. **Additional training data**: Consider generating more diverse training examples.\n")
+        f.write("5. **Model size**: Experiment with larger model sizes if resources permit.\n")
 
     return report_path
 

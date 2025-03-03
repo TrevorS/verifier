@@ -69,7 +69,7 @@ def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_len
         inputs = examples["input"]
 
         # Add instruction prefix to leverage FLAN-T5's instruction-following capabilities
-        instructions = ["Convert to JSON: " + text for text in inputs]
+        instructions = [config.INSTRUCTION_PREFIX + ": " + text for text in inputs]
 
         # Get the target texts
         targets = examples["target"]

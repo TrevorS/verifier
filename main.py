@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main entry point for the monetary expressions to JSON converter.
+Main entry point for the monetary expressions to numeric amount converter.
 """
 
 import argparse
@@ -126,37 +126,22 @@ def infer(args):
         logger.info(f"Processing {len(texts)} inputs from file")
         # Process each input
         for text in texts:
-            json_str, json_obj, is_valid, amount = inference_pipeline(text=text, model_path=args.model_path)
+            amount = inference_pipeline(text=text, model_path=args.model_path)
 
             print("\n" + "-" * 50)
             print(f"Input: {text}")
-            print(f"Output JSON: {json_str}")
+            print(f"Output: {amount}")
 
-            if is_valid:
-                print("✅ Valid JSON")
-                print(f"Amount: {amount}")
-                if json_obj and json_obj.get("currency"):
-                    print(f"Currency: {json_obj['currency']}")
-            else:
-                print("❌ Invalid JSON output")
     else:
         # Process single input
         text = args.text
         logger.info(f"Processing input: {text}")
 
-        json_str, json_obj, is_valid, amount = inference_pipeline(text=text, model_path=args.model_path)
+        amount = inference_pipeline(text=text, model_path=args.model_path)
 
         print("\n" + "-" * 50)
         print(f"Input: {text}")
-        print(f"Output JSON: {json_str}")
-
-        if is_valid:
-            print("✅ Valid JSON")
-            print(f"Amount: {amount}")
-            if json_obj and json_obj.get("currency"):
-                print(f"Currency: {json_obj['currency']}")
-        else:
-            print("❌ Invalid JSON output")
+        print(f"Output: {amount}")
 
     logger.info("Inference completed.")
 
@@ -191,7 +176,7 @@ def generate_data(args):
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description=("A sequence-to-sequence model that converts verbal monetary expressions to JSON."))
+    parser = argparse.ArgumentParser(description=("A sequence-to-sequence model that converts verbal monetary expressions to numeric amounts."))
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Train parser

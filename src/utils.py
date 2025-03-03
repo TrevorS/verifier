@@ -1,8 +1,7 @@
 """
-Utility functions for the monetary expressions to JSON converter.
+Utility functions for the monetary expressions to numeric amount converter.
 """
 
-import json
 import re
 
 import inflect
@@ -25,26 +24,6 @@ def normalize_text(text):
     text = re.sub(r"\s+", " ", text).strip()
 
     return text
-
-
-def format_json(amount):
-    """
-    Format a numeric amount as a JSON string with USD currency.
-
-    Args:
-        amount (float): Monetary amount
-
-    Returns:
-        str: JSON string representation with USD currency
-    """
-    # Ensure amount has two decimal places
-    formatted_amount = float(format(amount, ".2f"))
-
-    # Create JSON object with USD currency
-    json_obj = {"amount": formatted_amount, "currency": "USD"}
-
-    # Convert to JSON string
-    return json.dumps(json_obj)
 
 
 def number_to_words(amount, include_and=True):

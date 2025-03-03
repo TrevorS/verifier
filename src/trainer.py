@@ -20,6 +20,7 @@ from transformers import (
 import config
 import wandb
 from src.dataset import prepare_dataset
+from src.inference import extract_amount
 from src.model import initialize_model, save_model
 
 # Set environment variable to avoid tokenizers parallelism warning
@@ -131,23 +132,6 @@ def configure_training_args(
     return training_args
 
 
-def is_valid_json(string):
-    """
-    Check if a string is valid JSON.
-
-    Args:
-        string (str): String to check
-
-    Returns:
-        bool: True if valid JSON, False otherwise
-    """
-    try:
-        json.loads(string)
-        return True
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return False
-
-
 def compute_metrics(eval_preds):
     """
     Compute evaluation metrics for the model.
@@ -158,7 +142,6 @@ def compute_metrics(eval_preds):
     Returns:
         dict: Dictionary of metrics including:
             - exact_match: Exact match accuracy
-            - json_validity: Percentage of predictions that are valid JSON
             - mean_amount_diff: Mean absolute difference between predicted and actual amounts
             - mean_levenshtein: Mean Levenshtein distance between predictions and labels
     """
@@ -226,8 +209,6 @@ def compute_metrics(eval_preds):
     # Calculate metrics
     exact_match_score = exact_match.compute(predictions=decoded_preds, references=decoded_labels)
 
-    # Check JSON validity and extract amounts for numeric difference
-    valid_json_count = 0
     valid_amounts = []
     levenshtein_distances = []
 
@@ -235,35 +216,20 @@ def compute_metrics(eval_preds):
         # Calculate Levenshtein distance
         levenshtein_distances.append(levenshtein_distance(pred, label))
 
-        # Check JSON validity
-        pred_valid = is_valid_json(pred)
-        label_valid = is_valid_json(label)
+        # extract amounts
+        pred_amount = extract_amount(pred)
+        label_amount = extract_amount(label)
 
-        if pred_valid:
-            valid_json_count += 1
+        # if both amounts are valid, calculate amount difference
+        if pred_amount is not None and label_amount is not None:
+            valid_amounts.append((pred_amount, label_amount))
 
-            # If both are valid JSON, calculate amount difference
-            if pred_valid and label_valid:
-                try:
-                    pred_json = json.loads(pred)
-                    label_json = json.loads(label)
-
-                    if "amount" in pred_json and "amount" in label_json:
-                        pred_amount = float(pred_json["amount"])
-                        label_amount = float(label_json["amount"])
-                        valid_amounts.append((pred_amount, label_amount))
-                except (ValueError, TypeError, KeyError):
-                    pass
-
-    # Calculate numeric difference for valid JSON
+    # Calculate numeric difference for valid amounts
     if valid_amounts:
         amount_diffs = [abs(pred - label) for pred, label in valid_amounts]
         mean_amount_diff = np.mean(amount_diffs)
     else:
         mean_amount_diff = float("inf")
-
-    # Calculate json validity percentage
-    json_validity = valid_json_count / len(decoded_preds) if decoded_preds else 0
 
     # Calculate mean Levenshtein distance
     mean_levenshtein = np.mean(levenshtein_distances) if levenshtein_distances else float("inf")
@@ -271,7 +237,6 @@ def compute_metrics(eval_preds):
     # Prepare and return metrics
     metrics = {
         "exact_match": exact_match_score["exact_match"],
-        "json_validity": json_validity,
         "mean_amount_diff": mean_amount_diff,
         "mean_levenshtein": mean_levenshtein,
     }
@@ -445,25 +410,7 @@ def train_model(
 
     # Store the tokenizer so we can use it for compute_metrics
     compute_metrics.tokenizer = tokenizer
-
-    # Handle deprecation of tokenizer parameter in Seq2SeqTrainer
-    # For now, we'll use the tokenizer parameter with a warning, but the code is ready
-    # for a proper fix when transformers 5.0.0 is released
-    logger.warning(
-        "Using deprecated 'tokenizer' parameter in Seq2SeqTrainer. "
-        + "This will be removed in version 5.0.0. We'll update this code when the "
-        + "processing_class API is stabilized in transformers."
-    )
     trainer_kwargs["tokenizer"] = tokenizer
-
-    # Note: The following code is ready for when transformers 5.0.0 is released:
-    # from transformers.processing_utils import ProcessorMixin
-    # class TokenizerWrapper(ProcessorMixin):
-    #     def __init__(self, tokenizer):
-    #         self.tokenizer = tokenizer
-    #     def __call__(self, *args, **kwargs):
-    #         return self.tokenizer(*args, **kwargs)
-    # trainer_kwargs["processing_class"] = TokenizerWrapper(tokenizer)
 
     # Create the trainer
     trainer = Seq2SeqTrainer(**trainer_kwargs)
@@ -595,7 +542,6 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
             try:
                 # Evaluate prediction
                 is_exact_match = predictions[i] == references[i]
-                is_json_valid = is_valid_json(predictions[i]) and is_valid_json(references[i])
 
                 # Calculate Levenshtein distance
                 lev_distance = levenshtein_distance(predictions[i], references[i])
@@ -606,7 +552,6 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
                         "reference": references[i],
                         "prediction": predictions[i],
                         "exact_match": is_exact_match,
-                        "valid_json": is_json_valid,
                         "levenshtein_distance": lev_distance,
                     }
                 )
@@ -631,7 +576,6 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
         # Calculate summary statistics
         try:
             exact_match_count = sum(1 for ex in report if ex.get("exact_match", False))
-            valid_json_count = sum(1 for ex in report if ex.get("valid_json", False))
 
             # Only include examples without errors for levenshtein distance
             levenshtein_distances = [ex["levenshtein_distance"] for ex in report if "levenshtein_distance" in ex]
@@ -640,7 +584,6 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
             summary = {
                 "num_examples": len(report),
                 "exact_match_ratio": exact_match_count / len(report) if report else 0,
-                "valid_json_ratio": valid_json_count / len(report) if report else 0,
                 "avg_levenshtein_distance": avg_levenshtein,
             }
 
@@ -654,7 +597,7 @@ def generate_training_reports(trainer, tokenizer, eval_dataset, output_dir, num_
                 wandb.log(summary)
 
                 # Create a W&B Table
-                columns = ["input", "reference", "prediction", "exact_match", "valid_json", "levenshtein_distance"]
+                columns = ["input", "reference", "prediction", "exact_match", "levenshtein_distance"]
                 data = []
                 for ex in report:
                     if all(col in ex for col in columns):
