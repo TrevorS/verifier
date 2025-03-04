@@ -96,15 +96,18 @@ def extract_amount(output_text: str) -> Optional[float]:
     Returns:
         float: Parsed amount, or None if invalid
     """
-    # dollars|cents
-    # Extract the amount from the output text
-    amount_match = re.search(r"amount=(\d+)", output_text)
-    if amount_match:
-        amount_str = amount_match.group(1)
+    pipe_match = re.search(r"(\d+)\|(\d+)", output_text)
+    if pipe_match:
+        dollars_str = pipe_match.group(1)
+        cents_str = pipe_match.group(2)
         try:
-            return float(amount_str)
+            dollars = int(dollars_str)
+            cents = int(cents_str)
+            return dollars + (cents / 100)
         except ValueError:
-            return None
+            pass
+
+    return None
 
 
 def inference_pipeline(text: str, model_path: str) -> Tuple[Optional[float], str]:

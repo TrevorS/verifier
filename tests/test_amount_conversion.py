@@ -1,7 +1,8 @@
 import sys
-import pytest
 from decimal import Decimal
 from pathlib import Path
+
+import pytest
 
 # Add the parent directory to the path to import from src
 sys.path.append(str(Path(__file__).parent.parent))

@@ -9,7 +9,6 @@ import os
 import evaluate
 import numpy as np
 import torch
-import wandb
 from Levenshtein import distance as levenshtein_distance
 from transformers import (
     AutoTokenizer,
@@ -19,6 +18,7 @@ from transformers import (
 )
 
 import config
+import wandb
 from src.dataset import prepare_dataset
 from src.inference import extract_amount
 from src.model import initialize_model, save_model
@@ -43,7 +43,7 @@ def configure_training_args(
     save_steps=None,
     gradient_accumulation_steps=None,
     fp16=None,
-    early_stopping_patience=3,
+    early_stopping_patience=None,
 ):
     """
     Configure training arguments for the Seq2SeqTrainer.
@@ -100,6 +100,9 @@ def configure_training_args(
 
     if fp16 is None:
         fp16 = config.FP16
+
+    # early_stopping_patience is just passed through, not used in Seq2SeqTrainingArguments
+    # It will be used later when creating the EarlyStoppingCallback
 
     # Configure training arguments
     training_args = Seq2SeqTrainingArguments(
@@ -203,6 +206,30 @@ def compute_metrics(eval_preds):
     decoded_preds = [pred.strip() for pred in decoded_preds]
     decoded_labels = [label.strip() for label in decoded_labels]
 
+    # Log a few examples for debugging
+    example_data = []
+    if len(decoded_preds) > 0:
+        num_samples = min(10, len(decoded_preds))
+        logger.info(f"Sample predictions (first {num_samples}):")
+        for i in range(num_samples):
+            pred_amount = extract_amount(decoded_preds[i])
+            label_amount = extract_amount(decoded_labels[i])
+            logger.info(f"  Pred: '{decoded_preds[i]}' → {pred_amount}")
+            logger.info(f"  Label: '{decoded_labels[i]}' → {label_amount}")
+
+            # Collect example data for wandb
+            example_data.append(
+                {
+                    "prediction": decoded_preds[i],
+                    "reference": decoded_labels[i],
+                    "pred_amount": str(pred_amount) if pred_amount is not None else "None",
+                    "label_amount": str(label_amount) if label_amount is not None else "None",
+                    "is_exact_match": decoded_preds[i] == decoded_labels[i],
+                    "amount_diff": abs(pred_amount - label_amount) if pred_amount is not None and label_amount is not None else None,
+                    "levenshtein": levenshtein_distance(decoded_preds[i], decoded_labels[i]),
+                }
+            )
+
     # Initialize metrics
     exact_match = evaluate.load("exact_match")
 
@@ -211,10 +238,16 @@ def compute_metrics(eval_preds):
 
     valid_amounts = []
     levenshtein_distances = []
+    amount_diffs = []
+    exact_matches = []
 
     for pred, label in zip(decoded_preds, decoded_labels):
         # Calculate Levenshtein distance
-        levenshtein_distances.append(levenshtein_distance(pred, label))
+        lev_dist = levenshtein_distance(pred, label)
+        levenshtein_distances.append(lev_dist)
+
+        # Track exact matches
+        exact_matches.append(1 if pred == label else 0)
 
         # extract amounts
         pred_amount = extract_amount(pred)
@@ -222,28 +255,86 @@ def compute_metrics(eval_preds):
 
         # if both amounts are valid, calculate amount difference
         if pred_amount is not None and label_amount is not None:
+            diff = abs(pred_amount - label_amount)
             valid_amounts.append((pred_amount, label_amount))
+            amount_diffs.append(diff)
 
     # Calculate numeric difference for valid amounts
     if valid_amounts:
-        amount_diffs = [abs(pred - label) for pred, label in valid_amounts]
         mean_amount_diff = np.mean(amount_diffs)
+        median_amount_diff = np.median(amount_diffs)
+        max_amount_diff = np.max(amount_diffs)
+        logger.info(f"Found {len(valid_amounts)} valid amount pairs out of {len(decoded_preds)} examples")
+        logger.info(f"Amount diff stats - Mean: {mean_amount_diff:.4f}, Median: {median_amount_diff:.4f}, Max: {max_amount_diff:.4f}")
     else:
         mean_amount_diff = float("inf")
+        median_amount_diff = float("inf")
+        max_amount_diff = float("inf")
+        logger.warning("No valid amount pairs found! Check extract_amount function and model outputs.")
 
     # Calculate mean Levenshtein distance
-    mean_levenshtein = np.mean(levenshtein_distances) if levenshtein_distances else float("inf")
+    if levenshtein_distances:
+        mean_levenshtein = np.mean(levenshtein_distances)
+        median_levenshtein = np.median(levenshtein_distances)
+        max_levenshtein = np.max(levenshtein_distances)
+    else:
+        mean_levenshtein = float("inf")
+        median_levenshtein = float("inf")
+        max_levenshtein = float("inf")
+
+    # Calculate percentage of valid amounts extracted
+    valid_extraction_rate = len(valid_amounts) / len(decoded_preds) if decoded_preds else 0
 
     # Prepare and return metrics
     metrics = {
         "exact_match": exact_match_score["exact_match"],
         "mean_amount_diff": mean_amount_diff,
+        "median_amount_diff": median_amount_diff,
+        "max_amount_diff": max_amount_diff,
         "mean_levenshtein": mean_levenshtein,
+        "median_levenshtein": median_levenshtein,
+        "max_levenshtein": max_levenshtein,
+        "valid_amount_pairs": len(valid_amounts),
+        "total_examples": len(decoded_preds),
+        "valid_extraction_rate": valid_extraction_rate,
     }
 
     # Log metrics to Weights & Biases if enabled
     if wandb.run is not None:
+        # Log all metrics
         wandb.log(metrics)
+
+        # Create a histogram of amount differences if we have valid amounts
+        if amount_diffs:
+            wandb.log({"amount_diff_histogram": wandb.Histogram(amount_diffs)})
+
+        # Create a histogram of Levenshtein distances
+        if levenshtein_distances:
+            wandb.log({"levenshtein_histogram": wandb.Histogram(levenshtein_distances)})
+
+        # Log example predictions as a table
+        if example_data:
+            # Create a wandb Table directly from the list of dictionaries
+            examples_table = wandb.Table(
+                columns=["prediction", "reference", "pred_amount", "label_amount", "is_exact_match", "amount_diff", "levenshtein"],
+                data=[
+                    [
+                        ex["prediction"],
+                        ex["reference"],
+                        ex["pred_amount"],
+                        ex["label_amount"],
+                        ex["is_exact_match"],
+                        ex["amount_diff"],
+                        ex["levenshtein"],
+                    ]
+                    for ex in example_data
+                ],
+            )
+            wandb.log({"example_predictions": examples_table})
+
+        # Log confusion matrix of exact matches (binary classification)
+        if exact_matches:
+            wandb.log({"exact_match_dist": wandb.Histogram(exact_matches)})
 
     return metrics
 
@@ -273,7 +364,7 @@ def setup_trainer(
         transformers.Seq2SeqTrainer: Configured trainer
     """
     # Configure training arguments
-    training_args = configure_training_args(output_dir)
+    training_args = configure_training_args(output_dir, early_stopping_patience=early_stopping_patience)
 
     # Set up trainer
     trainer = Seq2SeqTrainer(
@@ -348,22 +439,43 @@ def train_model(
 
     # Initialize W&B
     if wandb_logging:
+        # Create a more descriptive run name
+        run_name = f"{os.path.basename(model_name)}-{wandb.util.generate_id()}"
+        if quick_test:
+            run_name = f"quick-test-{run_name}"
+
+        # Collect all hyperparameters
+        wandb_config = {
+            # Model info
+            "model_name": model_name,
+            "model_type": model_name.split("/")[-1] if "/" in model_name else model_name,
+            # Training hyperparameters
+            "learning_rate": config.LEARNING_RATE,
+            "batch_size": training_args_kwargs.get("batch_size", config.BATCH_SIZE),
+            "epochs": training_args_kwargs.get("num_train_epochs", config.NUM_EPOCHS),
+            "warmup_ratio": config.WARMUP_RATIO,
+            "weight_decay": config.WEIGHT_DECAY,
+            "gradient_accumulation_steps": config.GRADIENT_ACCUMULATION_STEPS,
+            "fp16": config.FP16,
+            "early_stopping_patience": early_stopping_patience,
+            # Generation parameters
+            "max_input_length": config.MAX_INPUT_LENGTH,
+            "max_target_length": config.MAX_TARGET_LENGTH,
+            "num_beams": config.NUM_BEAMS,
+            # Data info
+            "train_data_path": str(train_data_path),
+            "val_data_path": str(val_data_path),
+            # Environment info
+            "device": config.DEVICE,
+            "quick_test": quick_test,
+        }
+
+        # Initialize wandb
         wandb.init(
             project=config.WANDB_PROJECT,
             entity=config.WANDB_ENTITY,
-            config={
-                "model_name": model_name,
-                "learning_rate": config.LEARNING_RATE,
-                "batch_size": training_args_kwargs.get("batch_size", config.BATCH_SIZE),
-                "epochs": training_args_kwargs.get("num_train_epochs", config.NUM_EPOCHS),
-                "warmup_ratio": config.WARMUP_RATIO,
-                "weight_decay": config.WEIGHT_DECAY,
-                "max_input_length": config.MAX_INPUT_LENGTH,
-                "max_target_length": config.MAX_TARGET_LENGTH,
-                "early_stopping_patience": early_stopping_patience,
-                "quick_test": quick_test,
-                "device": config.DEVICE,
-            },
+            name=run_name,
+            config=wandb_config,
         )
 
     # Prepare dataset
@@ -373,6 +485,35 @@ def train_model(
         val_data_path,
         model_name,
     )
+
+    # Log dataset statistics to wandb
+    if wandb_logging:
+        wandb.log(
+            {
+                "train_dataset_size": len(preprocessed_dataset["train"]),
+                "val_dataset_size": len(preprocessed_dataset["validation"]),
+            }
+        )
+
+        # Log a few examples from the training data
+        if len(preprocessed_dataset["train"]) > 0:
+            train_examples = []
+            num_examples = min(10, len(preprocessed_dataset["train"]))
+            for i in range(num_examples):
+                example = preprocessed_dataset["train"][i]
+                # Decode the input_ids and labels
+                input_text = tokenizer.decode(example["input_ids"], skip_special_tokens=True)
+                target_text = tokenizer.decode(example["labels"], skip_special_tokens=True)
+                train_examples.append(
+                    {
+                        "input": input_text,
+                        "target": target_text,
+                    }
+                )
+
+            # Log examples as a table
+            examples_table = wandb.Table(columns=["input", "target"], data=[[ex["input"], ex["target"]] for ex in train_examples])
+            wandb.log({"train_examples": examples_table})
 
     # Limit dataset size for quick test
     if quick_test:
@@ -389,6 +530,20 @@ def train_model(
     # Initialize model
     logger.info(f"Initializing model: {model_name}")
     model = initialize_model(model_name)
+
+    # Log model architecture to wandb
+    if wandb_logging:
+        # Count model parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        wandb.log(
+            {
+                "model_total_parameters": total_params,
+                "model_trainable_parameters": trainable_params,
+                "model_frozen_parameters": total_params - trainable_params,
+            }
+        )
 
     # Store tokenizer for compute_metrics function
     compute_metrics.tokenizer = tokenizer
@@ -422,45 +577,97 @@ def train_model(
     # Log training metrics
     logger.info(f"Training completed. Training metrics: {train_result.metrics}")
     if wandb_logging:
-        wandb.log({"train_runtime": train_result.metrics["train_runtime"]})
-        wandb.log({"train_samples_per_second": train_result.metrics["train_samples_per_second"]})
+        # Log final training metrics
+        wandb.log(
+            {
+                "train_runtime": train_result.metrics["train_runtime"],
+                "train_samples_per_second": train_result.metrics["train_samples_per_second"],
+                "train_steps_per_second": train_result.metrics["train_steps_per_second"],
+                "train_loss": train_result.metrics.get("train_loss", float("nan")),
+                "training_complete": True,
+            }
+        )
 
     # Evaluate on validation set
     logger.info("Evaluating on validation set...")
     eval_results = trainer.evaluate()
     logger.info(f"Validation metrics: {eval_results}")
 
+    # Log final evaluation metrics to wandb
+    if wandb_logging:
+        wandb.log({"final_" + k: v for k, v in eval_results.items()})
+
     # Save the best model
     best_model_path = os.path.join(output_dir, "best")
     logger.info(f"Saving best model to {best_model_path}")
+
+    # Prepare metadata
+    model_metadata = {
+        "model_name": model_name,
+        "train_data_path": str(train_data_path),
+        "val_data_path": str(val_data_path),
+        "train_metrics": train_result.metrics,
+        "eval_metrics": eval_results,
+        "training_args": training_args.to_dict(),
+        "timestamp": wandb.util.generate_id(),  # Use as a unique identifier
+    }
+
     save_model(
         trainer.model,
         tokenizer,
         best_model_path,
-        metadata={
-            "model_name": model_name,
-            "train_data_path": str(train_data_path),
-            "val_data_path": str(val_data_path),
-            "train_metrics": train_result.metrics,
-            "eval_metrics": eval_results,
-        },
+        metadata=model_metadata,
     )
+
+    # Log model metadata to wandb
+    if wandb_logging:
+        wandb.log({"model_metadata": model_metadata})
 
     # Generate training reports
     try:
         logger.info("Generating training reports...")
+        reports_dir = os.path.join(output_dir, "reports")
         generate_training_reports(
             trainer,
             tokenizer,
             preprocessed_dataset["validation"],
-            os.path.join(output_dir, "reports"),
+            reports_dir,
         )
+
+        # Log reports to wandb if available
+        if wandb_logging:
+            try:
+                report_path = os.path.join(reports_dir, "prediction_examples.json")
+                summary_path = os.path.join(reports_dir, "prediction_summary.json")
+
+                if os.path.exists(report_path):
+                    with open(report_path, "r") as f:
+                        report_data = json.load(f)
+
+                    # Create a wandb Table directly from the JSON data
+                    if report_data and len(report_data) > 0:
+                        # Get column names from the first item
+                        columns = list(report_data[0].keys())
+                        # Extract data rows
+                        data = [[item.get(col, "") for col in columns] for item in report_data]
+                        examples_table = wandb.Table(columns=columns, data=data)
+                        wandb.log({"prediction_examples_json": examples_table})
+
+                if os.path.exists(summary_path):
+                    with open(summary_path, "r") as f:
+                        summary_data = json.load(f)
+                    wandb.log({"prediction_summary": summary_data})
+            except Exception as e:
+                logger.error(f"Failed to log reports to wandb: {e}")
+
     except Exception as e:
         logger.error(f"Failed to generate training reports: {e}")
         logger.error("Continuing without reports generation")
 
     # Finish W&B run
     if wandb_logging:
+        # Log final status
+        wandb.log({"training_status": "completed"})
         wandb.finish()
 
     return best_model_path
