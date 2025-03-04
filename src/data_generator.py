@@ -800,6 +800,42 @@ def donation_check_format(amount):
     return " ".join(result)
 
 
+@register_variation("formal_large_amount", weight=2.0)
+def formal_large_amount_format(amount):
+    """
+    Formats large amounts in a formal way with explicit million/thousand markers.
+    Example: 1234567.89 → "one million two hundred thirty-four thousand five hundred sixty-seven dollars and eighty-nine cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "zero dollars"
+
+    result = []
+
+    # Handle dollars with explicit formatting for large numbers
+    if dollars > 0:
+        # Use format_large_number with explicit 'and' and commas for clarity
+        dollar_words = format_large_number(dollars, use_and=True, use_commas=True)
+        
+        # For very large numbers, add extra emphasis
+        if dollars >= 1000000:
+            # Highlight the "million" part by ensuring proper formatting
+            dollar_words = re.sub(r"million", "million", dollar_words)
+            
+        result.append(f"{dollar_words} {p.plural('dollar', dollars)}")
+
+    # Handle cents
+    if cents > 0:
+        if dollars > 0:
+            result.append("and")
+        cent_words = cents_to_words(cents)
+        result.append(f"{cent_words} {p.plural('cent', cents)}")
+
+    return " ".join(result)
+
+
 # Add more variations here...
 
 
@@ -861,11 +897,12 @@ def generate_stratified_amounts(num_examples):
         (100.00, 999.99),  # Triple-digit dollars
         (1000.00, 9999.99),  # Thousands
         (10000.00, 99999.99),  # Tens of thousands
-        (100000.00, 1000000.00),  # Hundreds of thousands to million
+        (100000.00, 999999.99),  # Hundreds of thousands
+        (1000000.00, 10000000.00),  # Millions
     ]
 
-    # Assign more weight to common ranges (cents, single, double, triple-digit dollars)
-    weights = [0.15, 0.20, 0.20, 0.15, 0.15, 0.10, 0.05]
+    # Assign more weight to common ranges and increase weight for large amounts
+    weights = [0.10, 0.15, 0.15, 0.15, 0.15, 0.10, 0.10, 0.10]  # Increased weight for large amounts
 
     # Determine number of examples per range
     counts = [int(num_examples * w) for w in weights]
@@ -998,6 +1035,9 @@ def generate_examples(num_examples, control_variation_distribution=True):
             "no_and": 0.08,  # Common spoken form
             "only_dollars": 0.05,  # For whole dollars
             "cents_only": 0.05,  # For amounts < $1
+            # Add more emphasis on variations that handle large numbers well
+            "formal_large_amount": 0.08,  # Good for large amounts
+            "written_and_numeric": 0.08,  # Includes numeric representation
             # Other variations get smaller percentages
         }
 
@@ -1030,6 +1070,11 @@ def generate_examples(num_examples, control_variation_distribution=True):
                 variation = "standard"  # Fallback
             if variation == "only_dollars" and amount % 1 != 0:
                 variation = "standard"  # Fallback
+                
+            # For large amounts (≥1,000,000), prefer variations that handle them well
+            if amount >= 1000000 and variation not in ["standard", "formal_large_amount", "written_and_numeric", "no_and"]:
+                # Choose a variation that works well with large amounts
+                variation = random.choice(["standard", "formal_large_amount", "written_and_numeric", "no_and"])
 
             # Generate verbal expression
             verbal_expr, _ = amount_to_verbal_expression(amount, variation_type=variation)
@@ -1195,7 +1240,7 @@ def create_complete_dataset(
     output_dir=None,
     seed=42,
     augmentation_ratio=0.3,
-    hard_examples_ratio=0.05,  # 5% of examples should be hard examples
+    hard_examples_ratio=0.10,  # Increased from 0.05 to 0.10 (10% hard examples)
 ):
     """Create a complete dataset with train, validation, and test splits."""
     import math
@@ -1225,7 +1270,7 @@ def create_complete_dataset(
     test_size = num_examples - train_size - val_size
 
     # Calculate how many hard examples to generate
-    num_hard_examples = min(int(num_examples * hard_examples_ratio), 500)
+    num_hard_examples = min(int(num_examples * hard_examples_ratio), 1000)  # Increased max from 500 to 1000
 
     print(f"Generating {num_examples} examples:")
     print(f"- Training: {train_size}")
@@ -1395,8 +1440,15 @@ def generate_hard_examples(num_hard_examples=500):
         1000.00,  # Even thousand
         1234.56,  # Sequential digits
         10000.00,  # Even ten thousand
+        100000.00,  # Hundred thousand
+        500000.00,  # Half million
+        999999.99,  # Just under a million
         1000000.00,  # Million
         1000000.01,  # Just over a million
+        1500000.00,  # 1.5 million
+        2000000.00,  # 2 million
+        5000000.00,  # 5 million
+        10000000.00,  # 10 million
     ]
 
     # Important variations to test with every challenging amount

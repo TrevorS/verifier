@@ -9,7 +9,6 @@ from typing import Dict, List, Optional, Union, Tuple
 import torch
 import torch.nn as nn
 from transformers import (
-    AutoModelForSeq2SeqLM,
     AutoTokenizer,
     T5ForConditionalGeneration,
     T5PreTrainedModel,
@@ -28,6 +27,7 @@ class MonetaryAmountModel(T5PreTrainedModel):
     """
     Model for predicting monetary amounts as two separate float values (dollars and cents).
     Uses T5 encoder as the backbone with two regression heads.
+    Uses the entire sequence representation instead of just the first token.
     """
 
     def __init__(self, t5_config):
@@ -36,8 +36,14 @@ class MonetaryAmountModel(T5PreTrainedModel):
         # T5 encoder for processing input text
         self.encoder = T5EncoderModel(t5_config)
         
-        # Regression heads
+        # Sequence pooling layer
         hidden_size = t5_config.hidden_size
+        self.attention_pooling = nn.Sequential(
+            nn.Linear(hidden_size, 1),
+            nn.Softmax(dim=1)
+        )
+        
+        # Regression heads
         self.dollars_head = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.ReLU(),
@@ -85,12 +91,27 @@ class MonetaryAmountModel(T5PreTrainedModel):
             attention_mask=attention_mask,
         )
         
-        # Use [CLS] token representation (first token) for prediction
-        sequence_output = encoder_outputs.last_hidden_state[:, 0, :]
+        # Get the last hidden state
+        sequence_output = encoder_outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+        
+        # Apply attention pooling to get a weighted sum of all token representations
+        # First compute attention weights
+        attention_weights = self.attention_pooling(sequence_output)  # [batch_size, seq_len, 1]
+        
+        # Apply attention mask to zero out padding tokens
+        if attention_mask is not None:
+            # Expand attention mask to match attention_weights shape
+            expanded_attention_mask = attention_mask.unsqueeze(-1)  # [batch_size, seq_len, 1]
+            attention_weights = attention_weights * expanded_attention_mask
+            # Re-normalize the weights
+            attention_weights = attention_weights / (attention_weights.sum(dim=1, keepdim=True) + 1e-9)
+        
+        # Apply attention weights to get the context vector
+        context_vector = torch.sum(sequence_output * attention_weights, dim=1)  # [batch_size, hidden_size]
         
         # Get predictions from both heads
-        dollars_pred = self.dollars_head(sequence_output)
-        cents_pred = self.cents_head(sequence_output)
+        dollars_pred = self.dollars_head(context_vector)
+        cents_pred = self.cents_head(context_vector)
         
         # Squeeze predictions to match target shape and ensure float32
         dollars_pred = dollars_pred.squeeze(-1).to(torch.float32)
@@ -311,6 +332,11 @@ def initialize_model(model_name: Optional[str] = None, device: Optional[Union[st
     encoder_model = T5EncoderModel.from_pretrained(model_name)
     model.encoder.load_state_dict(encoder_model.state_dict())
 
+    # Log the model architecture
+    logger.info(f"Model architecture: Using attention pooling over the entire sequence")
+    logger.info(f"Model hidden size: {t5_config.hidden_size}")
+    logger.info(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
+    
     # Move the model to the device
     model = model.to(device)
 
@@ -484,7 +510,14 @@ def batch_process(
 
     # Process batch
     with torch.no_grad():
-        dollars_pred, cents_pred = model(**batch_inputs)
+        outputs = model(**batch_inputs)
+        
+        # Handle both tuple and dictionary return types
+        if isinstance(outputs, tuple):
+            dollars_pred, cents_pred = outputs
+        else:
+            dollars_pred = outputs["dollars_pred"]
+            cents_pred = outputs["cents_pred"]
 
     # Convert predictions to list of dictionaries
     predictions = []
@@ -551,7 +584,7 @@ class MonetaryAmountDataCollator:
         # Debug the features structure
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"Features keys: {list(features[0].keys())}")
+        # logger.info(f"Features keys: {list(features[0].keys())}")
         
         # First, separate the inputs and targets
         # Check if we're getting tokenized inputs or raw inputs

@@ -65,21 +65,22 @@ def run_model_inference(model, tokenizer, input_text: str, use_greedy_decoding: 
         str: Raw model output
     """
     try:
-        # Set generation parameters based on decoding strategy
-        if use_greedy_decoding:
-            # Greedy decoding (num_beams=1)
-            output_text = generate_text(
-                model=model,
-                tokenizer=tokenizer,
-                input_text=input_text,
-                num_beams=1,
-                temperature=1.0,  # No randomness in greedy decoding
-            )
-        else:
-            # Beam search for better quality
-            output_text = generate_text(model=model, tokenizer=tokenizer, input_text=input_text, num_beams=4, temperature=1.0)
-
-        return output_text
+        # Call the generate_text function which returns a dictionary with dollars and cents
+        prediction = generate_text(
+            model=model,
+            tokenizer=tokenizer,
+            input_text=input_text,
+            max_length=None,  # Use default max length
+        )
+        
+        # Format the output as a string for compatibility with existing code
+        dollars = int(prediction["dollars"])
+        cents = int(prediction["cents"])
+        
+        # Format the output as a string (e.g., "amount=1025" for $10.25)
+        formatted_output = f"amount={dollars * 100 + cents}"
+        
+        return formatted_output
 
     except Exception as e:
         logger.error(f"Error during model inference: {str(e)}")
