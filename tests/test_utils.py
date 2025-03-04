@@ -1,6 +1,8 @@
+"""Tests for utility functions."""
+
 import pytest
 
-from src.utils import normalize_text, number_to_words
+from src.utils.text_utils import normalize_text, number_to_words
 
 
 class TestNormalizeText:

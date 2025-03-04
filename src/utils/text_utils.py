@@ -1,5 +1,5 @@
 """
-Utility functions for the monetary expressions to numeric amount converter.
+Text utility functions for the monetary expressions to numeric amount converter.
 """
 
 import re

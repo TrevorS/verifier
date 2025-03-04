@@ -22,6 +22,7 @@ import wandb
 from src.dataset import prepare_dataset
 from src.inference import extract_amount
 from src.model import initialize_model, save_model
+from src.utils.decimal_utils import compare_amounts, float_to_decimal
 
 # Set environment variable to avoid tokenizers parallelism warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -225,15 +226,33 @@ def compute_metrics(eval_preds):
             logger.info(f"  Pred: '{decoded_preds[i]}' → {pred_amount}")
             logger.info(f"  Label: '{decoded_labels[i]}' → {label_amount}")
 
+            # Convert amounts to Decimal for precise comparison
+            if pred_amount is not None:
+                pred_decimal = float_to_decimal(pred_amount)
+            else:
+                pred_decimal = None
+
+            if label_amount is not None:
+                label_decimal = float_to_decimal(label_amount)
+            else:
+                label_decimal = None
+
+            # Compare amounts using decimal_utils
+            if pred_decimal is not None and label_decimal is not None:
+                is_equal, difference = compare_amounts(pred_decimal, label_decimal)
+                amount_diff = float(difference) if difference is not None else None
+            else:
+                amount_diff = None
+
             # Collect example data for wandb
             example_data.append(
                 {
                     "prediction": decoded_preds[i],
                     "reference": decoded_labels[i],
-                    "pred_amount": str(pred_amount) if pred_amount is not None else "None",
-                    "label_amount": str(label_amount) if label_amount is not None else "None",
+                    "pred_amount": str(pred_decimal) if pred_decimal is not None else "None",
+                    "label_amount": str(label_decimal) if label_decimal is not None else "None",
                     "is_exact_match": decoded_preds[i] == decoded_labels[i],
-                    "amount_diff": abs(pred_amount - label_amount) if pred_amount is not None and label_amount is not None else None,
+                    "amount_diff": amount_diff,
                     "levenshtein": levenshtein_distance(decoded_preds[i], decoded_labels[i]),
                 }
             )
@@ -257,15 +276,28 @@ def compute_metrics(eval_preds):
         # Track exact matches
         exact_matches.append(1 if pred == label else 0)
 
-        # extract amounts
+        # Extract amounts
         pred_amount = extract_amount(pred)
         label_amount = extract_amount(label)
 
-        # if both amounts are valid, calculate amount difference
-        if pred_amount is not None and label_amount is not None:
-            diff = abs(pred_amount - label_amount)
-            valid_amounts.append((pred_amount, label_amount))
-            amount_diffs.append(diff)
+        # Convert amounts to Decimal for precise comparison
+        if pred_amount is not None:
+            pred_decimal = float_to_decimal(pred_amount)
+        else:
+            pred_decimal = None
+
+        if label_amount is not None:
+            label_decimal = float_to_decimal(label_amount)
+        else:
+            label_decimal = None
+
+        # Compare amounts using decimal_utils
+        if pred_decimal is not None and label_decimal is not None:
+            is_equal, difference = compare_amounts(pred_decimal, label_decimal)
+            if difference is not None:
+                diff = float(difference)
+                valid_amounts.append((float(pred_decimal), float(label_decimal)))
+                amount_diffs.append(diff)
 
     # Calculate numeric difference for valid amounts
     if valid_amounts:

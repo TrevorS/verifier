@@ -125,7 +125,7 @@ class TestInferencePipeline:
 
         # Check the result
         assert raw_output == "25|10"
-        assert amount is None  # Because our mocked output doesn't actually get parsed to a float
+        assert amount == 25.10  # The mock output "25|10" should be correctly parsed to 25.10
 
         # Check that the functions were called correctly
         mock_load_model.assert_called_once_with("model/path")

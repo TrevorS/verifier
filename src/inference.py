@@ -8,7 +8,8 @@ from typing import List, Optional, Tuple
 
 import config
 from src.model import generate_text, load_model
-from src.utils import normalize_text
+from src.utils.decimal_utils import parse_delimited_amount
+from src.utils.text_utils import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +99,11 @@ def extract_amount(output_text: str) -> Optional[float]:
     """
     pipe_match = re.search(r"(\d+)\|(\d+)", output_text)
     if pipe_match:
-        dollars_str = pipe_match.group(1)
-        cents_str = pipe_match.group(2)
         try:
-            dollars = int(dollars_str)
-            cents = int(cents_str)
-            return dollars + (cents / 100)
+            # Parse the delimited amount using decimal_utils
+            decimal_amount = parse_delimited_amount(pipe_match.group(0))
+            # Convert back to float for API compatibility
+            return float(decimal_amount)
         except ValueError:
             pass
 

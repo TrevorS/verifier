@@ -7,13 +7,13 @@ import os
 import random
 import re
 import string
-from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import inflect
 import numpy as np
 
-from src.utils import normalize_text
+from src.utils.decimal_utils import format_amount
+from src.utils.text_utils import normalize_text
 
 # Create a global inflect engine for use across all variation functions
 p = inflect.engine()
@@ -1071,16 +1071,7 @@ def create_target_output(amount, delimiter="|"):
     Returns:
         str: A string representing the amount in 'dollars|cents' format.
     """
-    # Convert the float to a string with high precision then to Decimal.
-    # This helps to mitigate float precision errors.
-    d_amount = Decimal(f"{amount:.10f}")
-
-    # Round to two decimal places using ROUND_HALF_UP
-    rounded_amount = d_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    # Split into dollars and cents
-    dollars, cents = str(rounded_amount).split(".")
-    return delimiter.join([dollars, cents])
+    return format_amount(amount, delimiter=delimiter)
 
 
 def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):

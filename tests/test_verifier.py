@@ -125,17 +125,17 @@ def test_verify_dataset(tmp_path):
     # Test valid file
     is_valid, errors = verify_dataset(str(valid_file))
     assert is_valid
-    assert len([e for e in errors if "Summary" not in e]) == 0
+    assert len([e for e in errors if not e.startswith("[Summary]")]) == 0
 
     # Test invalid file
     is_valid, errors = verify_dataset(str(invalid_file))
     assert not is_valid
-    assert len([e for e in errors if "Summary" not in e]) == 3
+    assert len([e for e in errors if not e.startswith("[Summary]")]) == 3
 
     # Test mixed file
     is_valid, errors = verify_dataset(str(mixed_file))
     assert not is_valid
-    assert len([e for e in errors if "Summary" not in e]) == 1
+    assert len([e for e in errors if not e.startswith("[Summary]")]) == 1
 
     # Test non-existent file
     is_valid, errors = verify_dataset("nonexistent.jsonl")
@@ -156,7 +156,7 @@ def test_verify_dataset_malformed_json(tmp_path):
     is_valid, errors = verify_dataset(str(malformed_file))
     assert not is_valid
     assert any("Invalid JSON" in error for error in errors)
-    assert len([e for e in errors if "Summary" not in e]) == 1
+    assert len([e for e in errors if not e.startswith("[Summary]")]) == 1
 
 
 @pytest.mark.parametrize(

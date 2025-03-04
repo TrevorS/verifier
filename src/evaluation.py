@@ -3,6 +3,7 @@ Evaluation module for assessing model performance and analyzing errors.
 """
 
 import json
+import logging
 import os
 from collections import Counter, defaultdict
 
@@ -12,7 +13,12 @@ import pandas as pd
 from tqdm import tqdm
 
 import config
+from src.inference import extract_amount
 from src.model import generate_text, load_model
+from src.utils.decimal_utils import compare_amounts, float_to_decimal
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 # Custom JSON encoder to handle special values like Infinity and NaN
@@ -107,14 +113,28 @@ def analyze_prediction(input_text, expected_output, prediction, expected_amount=
     # Calculate exact match
     exact_match = prediction.strip() == expected_output.strip()
 
-    # Parse amounts
-    try:
-        expected_amount = float(expected_output)
-        predicted_amount = float(prediction)
-        amount_diff = abs(expected_amount - predicted_amount) if expected_amount is not None else None
-        relative_diff = (amount_diff / expected_amount) if expected_amount != 0 else float("inf")
-    except (ValueError, TypeError):
-        predicted_amount = None
+    # Parse amounts using extract_amount which now uses Decimal
+    predicted_amount = extract_amount(prediction)
+    if expected_amount is None:
+        expected_amount = extract_amount(expected_output)
+
+    # Convert amounts to Decimal for precise comparison
+    if predicted_amount is not None:
+        predicted_decimal = float_to_decimal(predicted_amount)
+    else:
+        predicted_decimal = None
+
+    if expected_amount is not None:
+        expected_decimal = float_to_decimal(expected_amount)
+    else:
+        expected_decimal = None
+
+    # Compare amounts using decimal_utils
+    if predicted_decimal is not None and expected_decimal is not None:
+        is_equal, difference = compare_amounts(predicted_decimal, expected_decimal)
+        amount_diff = float(difference) if difference is not None else None
+        relative_diff = float(difference / expected_decimal) if difference is not None and expected_decimal != 0 else float("inf")
+    else:
         amount_diff = None
         relative_diff = None
 
@@ -136,8 +156,8 @@ def analyze_prediction(input_text, expected_output, prediction, expected_amount=
         "amount_diff": amount_diff,
         "relative_diff": relative_diff,
         "error_type": error_type,
-        "expected_amount": expected_amount,
-        "predicted_amount": predicted_amount,
+        "expected_amount": float(expected_decimal) if expected_decimal is not None else None,
+        "predicted_amount": float(predicted_decimal) if predicted_decimal is not None else None,
     }
 
 
