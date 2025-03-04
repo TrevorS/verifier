@@ -1,4 +1,4 @@
-.PHONY: help test test-verbose test-integration test-slow test-all lint lint-fix format clean all generate-data train train-quick-test evaluate inference inference-demo check-deps update-deps coverage build
+.PHONY: help test test-verbose test-integration test-slow test-all lint lint-fix format clean all generate-data train train-quick-test evaluate inference inference-demo check-deps update-deps coverage build verify verify-all
 
 # Default target when running 'make' without arguments
 help:
@@ -26,6 +26,8 @@ help:
 	@echo "  make evaluate             - Evaluate the model"
 	@echo "  make inference            - Run inference with the model"
 	@echo "  make inference-demo       - Run the inference demo with example inputs"
+	@echo "  make verify FILE=path     - Verify a specific dataset file for rounding errors"
+	@echo "  make verify-all           - Verify all generated dataset files"
 
 # Run standard tests (excluding slow and integration tests)
 test:
@@ -70,6 +72,8 @@ all: lint format test
 # Generate synthetic training data
 generate-data:
 	python -m main generate-data
+	@echo "Verifying generated data files..."
+	@make verify-all
 
 # Train the model
 train:
@@ -136,4 +140,22 @@ clean:
 	rm -rf build
 	rm -rf *.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete 
+	find . -type f -name "*.pyc" -delete
+
+# Verify a specific dataset file
+verify:
+	@if [ -z "$(FILE)" ]; then \
+		echo "ERROR: FILE is required. Use 'make verify FILE=path/to/dataset.jsonl'"; \
+		exit 1; \
+	fi
+	python -m src.verifier "$(FILE)"
+
+# Verify all generated dataset files
+verify-all:
+	@echo "Verifying training data..."
+	@python -m src.verifier "data/train.jsonl" || exit 1
+	@echo "\nVerifying validation data..."
+	@python -m src.verifier "data/val.jsonl" || exit 1
+	@echo "\nVerifying test data..."
+	@python -m src.verifier "data/test.jsonl" || exit 1
+	@echo "\nAll dataset files verified successfully!" 
