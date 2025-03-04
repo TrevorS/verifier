@@ -4,7 +4,7 @@ Evaluation module for assessing model performance and analyzing errors.
 
 import json
 import os
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -114,6 +114,7 @@ def analyze_prediction(input_text, expected_output, prediction, expected_amount=
         amount_diff = abs(expected_amount - predicted_amount) if expected_amount is not None else None
         relative_diff = (amount_diff / expected_amount) if expected_amount != 0 else float("inf")
     except (ValueError, TypeError):
+        predicted_amount = None
         amount_diff = None
         relative_diff = None
 
@@ -135,6 +136,8 @@ def analyze_prediction(input_text, expected_output, prediction, expected_amount=
         "amount_diff": amount_diff,
         "relative_diff": relative_diff,
         "error_type": error_type,
+        "expected_amount": expected_amount,
+        "predicted_amount": predicted_amount,
     }
 
 
@@ -190,21 +193,27 @@ def calculate_metrics(results):
 
 def analyze_errors(results):
     """
-    Perform detailed error analysis on the results.
+    Perform error analysis on evaluation results.
 
     Args:
-        results (list): List of evaluation results
+        results (list): List of evaluation result dictionaries
 
     Returns:
-        dict: Dictionary with error analysis
+        dict: Dictionary with error analysis results
     """
-    # Group errors by type
+    # Count occurrences of each error type
+    error_types = Counter([r["error_type"] for r in results])
+    total = len(results)
+
+    error_type_breakdown = {error_type: {"count": count, "percentage": (count / total) * 100} for error_type, count in error_types.items()}
+
+    # Group errors by type (needed for error patterns analysis)
     errors_by_type = defaultdict(list)
     for result in results:
         if result["error_type"] != "none":
             errors_by_type[result["error_type"]].append(result)
 
-    # Analyze amount ranges
+    # Analyze errors by amount range
     amount_ranges = [
         (0, 1),
         (1, 10),
@@ -216,7 +225,7 @@ def analyze_errors(results):
     range_stats = {}
     for low, high in amount_ranges:
         range_name = f"{low}-{high if high != float('inf') else 'inf'}"
-        examples_in_range = [r for r in results if r["expected_amount"] is not None and low <= r["expected_amount"] < high]
+        examples_in_range = [r for r in results if r.get("expected_amount") is not None and low <= r["expected_amount"] < high]
 
         if examples_in_range:
             correct = sum(1 for r in examples_in_range if r["exact_match"])
@@ -235,11 +244,11 @@ def analyze_errors(results):
                 "avg_diff": avg_diff,
             }
 
-    # Find patterns in errors
+    # Find common error patterns
     common_error_patterns = find_error_patterns(results)
 
     return {
-        "errors_by_type_count": {k: len(v) for k, v in errors_by_type.items()},
+        "errors_by_type_count": error_type_breakdown,
         "range_stats": range_stats,
         "common_error_patterns": common_error_patterns,
     }

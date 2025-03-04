@@ -9,6 +9,7 @@ dependencies = [
     "datasets>=3.3.2",
     "evaluate>=0.4.3",
     "inflect>=7.5.0",
+    "ipython>=9.0.1",
     "matplotlib>=3.10.1",
     "numpy>=2.2.3",
     "pandas>=2.2.3",
