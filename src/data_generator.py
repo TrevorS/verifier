@@ -7,6 +7,7 @@ import os
 import random
 import re
 import string
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import inflect
@@ -1059,36 +1060,26 @@ def generate_examples(num_examples, control_variation_distribution=True):
 
 def create_target_output(amount, delimiter="|"):
     """
-    Create a target output for a given amount.
+    Create a target output for a given amount using precise decimal arithmetic.
+    This function handles cases like 9.995 correctly (rounds to 10.00) and avoids
+    common floating-point issues (e.g. 1.6099999999999999 becoming 1.60 instead of 1.61).
+
+    Args:
+        amount (float): The numeric value to format.
+        delimiter (str): The delimiter to use between dollars and cents.
+
+    Returns:
+        str: A string representing the amount in 'dollars|cents' format.
     """
-    # Handle special values like 9.995 that should round up to 10.00
-    # First check if we're close to a value that would round up to the next dollar
-    # We want to catch values like 0.995 and 9.995, but not 0.01
-    if abs(amount - round(amount)) < 0.011 and abs(amount - round(amount)) > 0.0001:
-        # Only apply this special handling for values close to the next dollar
-        # (i.e., values where the fractional part is close to 1.0)
-        fractional_part = abs(amount) % 1
-        if fractional_part > 0.99:  # Only for values like 0.995, 9.995, etc.
-            rounded_amount = round(amount)  # This will round 9.995 to 10.0
-        else:
-            # Normal case - round to two decimal places
-            rounded_amount = round(amount * 100) / 100
-    else:
-        # Normal case - round to two decimal places
-        rounded_amount = round(amount * 100) / 100
+    # Convert the float to a string with high precision then to Decimal.
+    # This helps to mitigate float precision errors.
+    d_amount = Decimal(f"{amount:.10f}")
+
+    # Round to two decimal places using ROUND_HALF_UP
+    rounded_amount = d_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     # Split into dollars and cents
-    dollars = int(rounded_amount)
-    cents = int(round((rounded_amount - dollars) * 100))
-
-    # Handle the case where cents round to 100
-    if cents == 100:
-        dollars += 1
-        cents = 0
-
-    dollars = str(dollars)
-    cents = f"{cents:02d}"
-
+    dollars, cents = str(rounded_amount).split(".")
     return delimiter.join([dollars, cents])
 
 

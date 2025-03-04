@@ -55,6 +55,7 @@ SAVE_STEPS = 500
 LOGGING_STEPS = 100
 MAX_GRAD_NORM = 1.0
 FP16 = False  # Mixed precision training
+BF16 = False  # BF16 mixed precision training (more stable than FP16)
 
 # Generation parameters
 MAX_NEW_TOKENS = 32

@@ -43,6 +43,7 @@ def configure_training_args(
     save_steps=None,
     gradient_accumulation_steps=None,
     fp16=None,
+    bf16=None,
     early_stopping_patience=None,
 ):
     """
@@ -60,7 +61,8 @@ def configure_training_args(
         eval_steps (int): Number of steps between evaluations
         save_steps (int): Number of steps between saving checkpoints
         gradient_accumulation_steps (int): Number of steps to accumulate gradients
-        fp16 (bool): Whether to use mixed precision training
+        fp16 (bool): Whether to use mixed precision training with FP16
+        bf16 (bool): Whether to use mixed precision training with BF16
         early_stopping_patience (int): Number of evaluations with no improvement after which to stop
 
     Returns:
@@ -101,6 +103,10 @@ def configure_training_args(
     if fp16 is None:
         fp16 = config.FP16
 
+    # Add BF16 support
+    if bf16 is None:
+        bf16 = config.BF16
+
     # early_stopping_patience is just passed through, not used in Seq2SeqTrainingArguments
     # It will be used later when creating the EarlyStoppingCallback
 
@@ -125,12 +131,14 @@ def configure_training_args(
         metric_for_best_model="exact_match",
         greater_is_better=True,
         fp16=fp16,
+        bf16=bf16,
         report_to="wandb" if wandb.run is not None else "none",
         push_to_hub=False,
         run_name=f"finetuned-{os.path.basename(output_dir)}-{wandb.util.generate_id()}" if wandb.run is not None else None,
     )
 
     logger.info(f"Training configuration: {num_train_epochs} epochs, batch size {batch_size}, eval steps {eval_steps}")
+    logger.info(f"Precision settings: FP16={fp16}, BF16={bf16}")
 
     return training_args
 
@@ -404,6 +412,7 @@ def train_model(
         wandb_logging (bool): Whether to log to Weights & Biases
         early_stopping_patience (int): Number of evaluations with no improvement after which to stop
         quick_test (bool): If True, runs a quick test with a small subset of data and reduced steps
+        bf16 (bool): Whether to use BF16 mixed precision training
 
     Returns:
         str: Path to the saved model
