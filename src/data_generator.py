@@ -1037,7 +1037,13 @@ def generate_examples(num_examples, control_variation_distribution=True):
 
             # Create example
             examples.append(
-                {"input": verbal_expr, "target": create_target_output(amount), "amount": float(format(amount, ".2f")), "variation": variation}
+                {
+                    "input": verbal_expr,
+                    "target": create_target_output(amount),
+                    "amount": float(format(amount, ".2f")),
+                    "variation": variation,
+                    "examples": [],
+                }
             )
     else:
         # Original approach - random selection based on weights
@@ -1052,6 +1058,7 @@ def generate_examples(num_examples, control_variation_distribution=True):
                     "target": create_target_output(amount),
                     "amount": float(format(amount, ".2f")),
                     "variation": variation_name,
+                    "examples": [],
                 }
             )
 
@@ -1169,7 +1176,8 @@ def create_complete_dataset(
     output_dir=None,
     seed=42,
     augmentation_ratio=0.3,
-    hard_examples_ratio=0.05,  # 5% of examples should be hard examples
+    example_ratio=0.3,  # Add parameter for example ratio
+    hard_examples_ratio=0.05,
 ):
     """Create a complete dataset with train, validation, and test splits."""
     import math
@@ -1211,6 +1219,22 @@ def create_complete_dataset(
     if num_hard_examples > 0:
         print(f"Generating {num_hard_examples} hard examples...")
         hard_examples = generate_hard_examples(num_hard_examples)
+
+        # Add metadata to hard examples
+        print("Adding metadata to hard examples...")
+        for example in hard_examples:
+            # Add amount range category
+            amount = example["amount"]
+            example["amount_range"] = classify_amount_range(amount)
+
+            # Add complexity indicator
+            example["complexity"] = classify_complexity(example["input"])
+
+            # Add has_cents flag
+            example["has_cents"] = (amount % 1) != 0
+
+            # Initialize empty examples list
+            example["examples"] = []
     else:
         hard_examples = []
 
@@ -1221,7 +1245,7 @@ def create_complete_dataset(
     print(f"Generating {num_regular_examples} regular examples...")
     regular_examples = generate_examples(num_regular_examples, control_variation_distribution=True)
 
-    # Add additional metadata
+    # Add metadata first
     print("Adding metadata...")
     for example in regular_examples:
         # Add amount range category
@@ -1234,15 +1258,21 @@ def create_complete_dataset(
         # Add has_cents flag
         example["has_cents"] = (amount % 1) != 0
 
-        # Apply augmentation to some examples
+    # Combine all examples before adding examples
+    all_examples = regular_examples + hard_examples
+
+    # Now add examples using the metadata
+    print(f"Adding examples to {example_ratio * 100:.1f}% of examples...")
+    all_examples = add_examples_to_dataset(all_examples, example_ratio=example_ratio, debug=True)
+
+    # Apply augmentation
+    print("Applying augmentation...")
+    for example in all_examples:
         if random.random() < augmentation_ratio:
             example["input"] = apply_augmentation(example["input"])
             example["augmented"] = True
         else:
             example["augmented"] = False
-
-    # Combine all examples
-    all_examples = regular_examples + hard_examples
 
     # Verify we have the correct total number of examples
     assert len(all_examples) == num_examples, f"Expected {num_examples} total examples, got {len(all_examples)}"
@@ -1301,6 +1331,11 @@ def print_dataset_statistics(dataset):
     # Overall counts
     for split in dataset:
         print(f"- {split.capitalize()}: {len(dataset[split])} examples")
+
+        # Count examples with examples
+        examples_with_examples = sum(1 for ex in dataset[split] if ex["examples"])
+        example_percentage = (examples_with_examples / len(dataset[split])) * 100
+        print(f"  - With examples: {examples_with_examples} ({example_percentage:.1f}%)")
 
     # Variation distribution
     print("\nVariation Distribution (Top 10):")
@@ -1434,55 +1469,105 @@ def classify_complexity(text):
         return "simple"
 
 
-if __name__ == "__main__":
-    # Generate a small sample dataset for testing
-    num_examples = 1000
-    train_path, val_path = generate_dataset(num_examples=num_examples)
+def add_examples_to_dataset(examples, example_ratio=0.3, debug=False):
+    """
+    Add examples to a subset of the dataset.
+    Each example will get one related example (same variation and amount range).
+    If an exact match cannot be found, will try to find a similar example.
 
-    # Load and analyze the distribution of amounts
-    amount_ranges = {
-        "cents_only": 0,
-        "single_digit": 0,
-        "double_digit": 0,
-        "triple_digit": 0,
-        "thousands": 0,
-        "tens_thousands": 0,
-        "hundreds_thousands+": 0,
-    }
+    Args:
+        examples (list): List of example dictionaries
+        example_ratio (float): Ratio of examples that should have an example added
+        debug (bool): Whether to print debug information
 
-    all_examples = []
-    # Read both files
-    for path in [train_path, val_path]:
-        with open(path, "r") as f:
-            for line in f:
-                example = json.loads(line)
-                all_examples.append(example)
+    Returns:
+        list: Updated examples with examples added to the specified ratio
+    """
+    # Calculate how many examples should have examples
+    num_with_examples = int(len(examples) * example_ratio)
 
-    # Count examples in each range
-    for example in all_examples:
-        amount = example["amount"]
-        if amount < 1:
-            amount_ranges["cents_only"] += 1
-        elif amount < 10:
-            amount_ranges["single_digit"] += 1
-        elif amount < 100:
-            amount_ranges["double_digit"] += 1
-        elif amount < 1000:
-            amount_ranges["triple_digit"] += 1
-        elif amount < 10000:
-            amount_ranges["thousands"] += 1
-        elif amount < 100000:
-            amount_ranges["tens_thousands"] += 1
+    if debug:
+        print("\nDebug: Adding examples to dataset")
+        print(f"Total examples: {len(examples)}")
+        print(f"Target number with examples: {num_with_examples}")
+
+    # Randomly select which examples will get examples
+    examples_to_augment = random.sample(examples, num_with_examples)
+
+    # Create lookup dictionaries for finding similar examples
+    examples_by_variation_and_range = {}
+    examples_by_variation = {}
+    examples_by_range = {}
+
+    # Track statistics for debugging
+    match_stats = {"exact_match": 0, "variation_match": 0, "range_match": 0, "any_match": 0, "no_match": 0}
+
+    for ex in examples:
+        # Full match key (variation and range)
+        key = (ex["variation"], ex["amount_range"])
+        if key not in examples_by_variation_and_range:
+            examples_by_variation_and_range[key] = []
+        examples_by_variation_and_range[key].append(ex)
+
+        # Variation only
+        if ex["variation"] not in examples_by_variation:
+            examples_by_variation[ex["variation"]] = []
+        examples_by_variation[ex["variation"]].append(ex)
+
+        # Range only
+        if ex["amount_range"] not in examples_by_range:
+            examples_by_range[ex["amount_range"]] = []
+        examples_by_range[ex["amount_range"]].append(ex)
+
+    # Add examples to selected examples
+    for ex in examples_to_augment:
+        chosen_example = None
+
+        # Try to find exact match first (same variation and range)
+        key = (ex["variation"], ex["amount_range"])
+        potential_examples = [e for e in examples_by_variation_and_range[key] if e != ex]
+
+        if potential_examples:
+            chosen_example = random.choice(potential_examples)
+            match_stats["exact_match"] += 1
         else:
-            amount_ranges["hundreds_thousands+"] += 1
+            # Try to find example with same variation
+            potential_examples = [e for e in examples_by_variation[ex["variation"]] if e != ex]
+            if potential_examples:
+                chosen_example = random.choice(potential_examples)
+                match_stats["variation_match"] += 1
+            else:
+                # Try to find example with same range
+                potential_examples = [e for e in examples_by_range[ex["amount_range"]] if e != ex]
+                if potential_examples:
+                    chosen_example = random.choice(potential_examples)
+                    match_stats["range_match"] += 1
+                else:
+                    # Last resort: pick any other example
+                    potential_examples = [e for e in examples if e != ex]
+                    if potential_examples:
+                        chosen_example = random.choice(potential_examples)
+                        match_stats["any_match"] += 1
+                    else:
+                        match_stats["no_match"] += 1
 
-    # Print distribution summary
-    print("\nAmount range distribution:")
-    for range_name, count in amount_ranges.items():
-        percentage = (count / num_examples) * 100
-        print(f"{range_name}: {count} examples ({percentage:.1f}%)")
+        if chosen_example:
+            # Create a clean example dictionary with only necessary fields
+            example_dict = {"input": chosen_example["input"], "target": chosen_example["target"], "amount": chosen_example["amount"]}
+            ex["examples"].append(example_dict)
 
-    # Print a summary of all available variations
-    print("\nAvailable variations:")
-    for var_name, var_data in VARIATIONS.items():
-        print(f"- {var_name} (weight: {var_data['weight']})")
+    if debug:
+        print("\nMatch statistics:")
+        print(f"Exact matches: {match_stats['exact_match']}")
+        print(f"Variation matches: {match_stats['variation_match']}")
+        print(f"Range matches: {match_stats['range_match']}")
+        print(f"Any matches: {match_stats['any_match']}")
+        print(f"No matches: {match_stats['no_match']}")
+
+        actual_with_examples = sum(1 for ex in examples if ex["examples"])
+        actual_ratio = actual_with_examples / len(examples)
+        print("\nFinal statistics:")
+        print(f"Examples with examples: {actual_with_examples}")
+        print(f"Actual ratio achieved: {actual_ratio:.3f}")
+
+    return examples

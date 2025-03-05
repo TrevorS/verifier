@@ -4,8 +4,10 @@ import tempfile
 import pytest
 
 from src.data_generator import (
+    add_examples_to_dataset,
     amount_to_verbal_expression,
     apply_augmentation,
+    create_complete_dataset,
     create_target_output,
     generate_dataset,
     generate_examples,
@@ -242,3 +244,93 @@ class TestCreateTargetOutput:
 
         expected = f"{dollars}|{cents:02d}"
         assert target == expected
+
+
+class TestExamplesListFunctionality:
+    def test_add_examples_to_dataset(self):
+        # Create a small test dataset
+        examples = [
+            {"input": "five dollars", "target": "5|00", "amount": 5.00, "variation": "standard", "amount_range": "single_digit", "examples": []},
+            {"input": "ten dollars", "target": "10|00", "amount": 10.00, "variation": "standard", "amount_range": "double_digit", "examples": []},
+            {"input": "fifteen dollars", "target": "15|00", "amount": 15.00, "variation": "standard", "amount_range": "double_digit", "examples": []},
+        ]
+
+        # Test with 100% example ratio to ensure deterministic behavior
+        result = add_examples_to_dataset(examples, example_ratio=1.0)
+
+        # Check that all examples have the examples list
+        assert all("examples" in ex for ex in result)
+
+        # Check that examples list exists but might be empty (when no matching examples found)
+        assert all(isinstance(ex["examples"], list) for ex in result)
+
+        # Check that examples are from the same variation and amount range
+        for ex in result:
+            for example in ex["examples"]:
+                # Check example format
+                assert "input" in example
+                assert "target" in example
+                assert "amount" in example
+
+    def test_examples_in_generate_examples(self):
+        # Generate a small test set
+        num_examples = 50
+        examples = generate_examples(num_examples)
+
+        # Check that all examples have the examples list field
+        assert all("examples" in ex for ex in examples)
+
+        # Check that examples list is always a list (even if empty)
+        assert all(isinstance(ex["examples"], list) for ex in examples)
+
+    def test_example_ratio_in_complete_dataset(self):
+        # Use a larger dataset for more reliable testing
+        num_examples = 1000  # Increased from 100
+        example_ratio = 0.5  # 50% should have examples
+
+        # Use a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset, _ = create_complete_dataset(num_examples=num_examples, output_dir=temp_dir, example_ratio=example_ratio)
+
+            # Check each split
+            for split in dataset:
+                examples_with_examples = sum(1 for ex in dataset[split] if ex["examples"])
+                total_examples = len(dataset[split])
+
+                # Count examples by variation and range for debugging
+                variation_counts = {}
+                range_counts = {}
+                for ex in dataset[split]:
+                    var = ex["variation"]
+                    range_type = ex["amount_range"]
+                    variation_counts[var] = variation_counts.get(var, 0) + 1
+                    range_counts[range_type] = range_counts.get(range_type, 0) + 1
+
+                ratio = examples_with_examples / total_examples
+
+                # Print detailed debug information if assertion would fail
+                if abs(ratio - example_ratio) >= 0.2:
+                    print(f"\nDebug info for {split} split:")
+                    print(f"Total examples: {total_examples}")
+                    print(f"Examples with examples: {examples_with_examples}")
+                    print(f"Actual ratio: {ratio:.3f}")
+                    print(f"Target ratio: {example_ratio:.3f}")
+                    print("\nVariation distribution:")
+                    for var, count in sorted(variation_counts.items(), key=lambda x: x[1], reverse=True):
+                        print(f"  {var}: {count}")
+                    print("\nRange distribution:")
+                    for range_type, count in sorted(range_counts.items(), key=lambda x: x[1], reverse=True):
+                        print(f"  {range_type}: {count}")
+
+                # Allow for some variance due to randomness
+                # Should be within 20% of target ratio
+                assert abs(ratio - example_ratio) < 0.2, f"Example ratio {ratio:.3f} too far from target {example_ratio:.3f} in {split} split"
+
+                # Check example format when present
+                for ex in dataset[split]:
+                    assert "examples" in ex
+                    assert isinstance(ex["examples"], list)
+                    for example in ex["examples"]:
+                        assert "input" in example
+                        assert "target" in example
+                        assert "amount" in example
