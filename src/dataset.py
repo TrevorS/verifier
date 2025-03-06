@@ -2,10 +2,13 @@
 Dataset preparation module using HuggingFace datasets.
 """
 
+import random
+
 import datasets
 from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 
 import config
+from src.prompts import create_prompt
 
 
 def load_dataset(train_path, val_path=None):
@@ -44,6 +47,33 @@ def configure_tokenizer(model_name):
     return tokenizer
 
 
+def select_examples(dataset: datasets.Dataset, num_examples: int = 2, method: str = "random") -> list[dict[str, str]]:
+    """
+    Select examples from the dataset for few-shot learning.
+
+    Args:
+        dataset: The dataset to select examples from
+        num_examples: Number of examples to select
+        method: Selection method ("random", "fixed", or "similar")
+
+    Returns:
+        list[dict[str, str]]: Selected examples
+    """
+    if method == "random":
+        indices = random.sample(range(len(dataset)), num_examples)
+        examples = []
+        for idx in indices:
+            examples.append(
+                {
+                    "input": dataset[idx]["input"],
+                    "output": dataset[idx]["output"],  # Using output field directly
+                }
+            )
+        return examples
+    else:  # "similar" - TODO: Implement similarity-based selection
+        return []  # Return empty list for now
+
+
 def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_length=None):
     """
     Preprocess the dataset by tokenizing inputs and targets.
@@ -67,23 +97,29 @@ def preprocess_dataset(dataset, tokenizer, max_input_length=None, max_target_len
         """Tokenize the inputs and targets."""
         # Get the input texts
         inputs = examples["input"]
+        outputs = examples["output"]  # Using output field directly
 
-        # Add instruction prefix to leverage FLAN-T5's instruction-following capabilities
-        instructions = [config.INSTRUCTION_PREFIX + ": " + text for text in inputs]
+        # Select examples for few-shot learning if enabled
+        if config.USE_EXAMPLES:
+            # Get examples from the training set
+            train_examples = select_examples(dataset["train"], num_examples=config.NUM_EXAMPLES, method=config.EXAMPLE_SELECTION)
+        else:
+            train_examples = None
 
-        # Get the target texts
-        targets = examples["target"]
+        # Create prompts with examples if enabled
+        processed_inputs = [create_prompt(text, examples=train_examples, instruction_prefix=config.INSTRUCTION_PREFIX) for text in inputs]
 
-        # Tokenize inputs with instruction prefix
+        # Tokenize inputs with instruction prefix and examples
         model_inputs = tokenizer(
-            instructions,
+            processed_inputs,
             max_length=max_input_length,
             padding="max_length",
             truncation=True,
         )
 
+        # Tokenize targets
         target_encoding = tokenizer(
-            text_target=targets,
+            text_target=outputs,
             max_length=max_target_length,
             padding="max_length",
             truncation=True,
