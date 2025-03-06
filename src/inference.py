@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 
 import config
 from src.model import generate_text, load_model
+from src.prompts import create_prompt
 from src.utils.decimal_utils import parse_delimited_amount
 from src.utils.text_utils import normalize_text
 
@@ -31,9 +32,9 @@ def prepare_input(text: str, add_instruction_prefix: bool = True) -> str:
     # Remove any special characters that might interfere with model processing
     normalized_text = re.sub(r"[^\w\s.,\-$€£¥]", "", normalized_text)
 
-    # Add instruction prefix to match training format if requested
+    # Add instruction if requested
     if add_instruction_prefix:
-        normalized_text = f"{config.INSTRUCTION_PREFIX}: {normalized_text}"
+        normalized_text = create_prompt(normalized_text, examples=None, instruction_prefix=config.INSTRUCTION_PREFIX)
 
     return normalized_text
 

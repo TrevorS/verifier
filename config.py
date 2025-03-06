@@ -28,7 +28,7 @@ TEST_DATA_PATH = DATA_DIR / "test.jsonl"
 
 # Model parameters
 MODEL_NAME = "google/flan-t5-small"
-MAX_INPUT_LENGTH = 128
+MAX_INPUT_LENGTH = 256  # Increased to accommodate examples
 MAX_TARGET_LENGTH = 32
 
 # Device configuration (automatic detection)
@@ -66,4 +66,7 @@ WANDB_PROJECT = "monetary-expressions-to-numeric-amount"
 WANDB_ENTITY = None  # Set to your wandb username or team name
 LOG_LEVEL = "INFO"
 
-INSTRUCTION_PREFIX = "Convert to pipe-delimited numeric amount"
+# Prompt settings
+INSTRUCTION_PREFIX = """convert this verbal monetary expression into a pipe-delimited amount in the format: dollars|cents"""
+USE_EXAMPLES = True  # Whether to include examples in prompts
+NUM_EXAMPLES = 2  # Number of examples to include in each prompt (if USE_EXAMPLES is True)
