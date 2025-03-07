@@ -24,7 +24,7 @@ from transformers import (
 
 import wandb
 
-# hush warnings related to tokenizer parellization
+# hush warnings related to tokenizer parallelization
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Setup logging
