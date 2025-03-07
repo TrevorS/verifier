@@ -124,17 +124,18 @@ def generate_negative_example(item: dict, next_item: dict, label: int = 0) -> tu
     amount = decimal.Decimal(item["amount"])
     next_amount = decimal.Decimal(next_item["amount"])
 
-    if random.random() < 0.4:
+    rand_value = random.random()
+    if rand_value < 0.4:
         wrong_decimal_amount = next_amount
-    elif random.random() < 0.5:
+    elif rand_value < 0.5:
         wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-1, 1))
-    elif random.random() < 0.6:
+    elif rand_value < 0.6:
         wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-10, 10))
-    elif random.random() < 0.7:
+    elif rand_value < 0.7:
         wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-100, 100))
-    elif random.random() < 0.8:
+    elif rand_value < 0.8:
         wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-1000, 1000))
-    elif random.random() < 0.9:
+    elif rand_value < 0.9:
         wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-10000, 10000))
     else:
         wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-100000, 100000))
