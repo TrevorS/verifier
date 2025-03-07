@@ -128,18 +128,17 @@ def generate_negative_example(item: dict, next_item: dict, label: int = 0) -> tu
     if rand_value < 0.4:
         wrong_decimal_amount = next_amount
     elif rand_value < 0.5:
-        wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-1, 1))
+        wrong_decimal_amount = amount + decimal.Decimal(random.randint(-100, 100)) / 100
     elif rand_value < 0.6:
-        wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-10, 10))
+        wrong_decimal_amount = amount + decimal.Decimal(random.randint(-1000, 1000)) / 100
     elif rand_value < 0.7:
-        wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-100, 100))
+        wrong_decimal_amount = amount + decimal.Decimal(random.randint(-10000, 10000)) / 100
     elif rand_value < 0.8:
-        wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-1000, 1000))
+        wrong_decimal_amount = amount + decimal.Decimal(random.randint(-100000, 100000)) / 100
     elif rand_value < 0.9:
-        wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-10000, 10000))
+        wrong_decimal_amount = amount + decimal.Decimal(random.randint(-1000000, 1000000)) / 100
     else:
-        wrong_decimal_amount = amount + decimal.Decimal(random.uniform(-100000, 100000))
-
+        wrong_decimal_amount = amount + decimal.Decimal(random.randint(-10000000, 10000000)) / 100
     wrong_decimal_amount = f"{wrong_decimal_amount:.2f}"
     return verbal_amount, wrong_decimal_amount, label
 
