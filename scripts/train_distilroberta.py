@@ -176,12 +176,13 @@ def compute_metrics(eval_pred) -> dict[str, float]:
     # Log confusion matrix to wandb
     wandb.log({"conf_mat": wandb.plot.confusion_matrix(probs=None, y_true=labels, preds=predictions, class_names=["Not Match", "Match"])})
 
-    return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
+    # Convert NumPy values to Python floats
+    return {"accuracy": float(accuracy), "precision": float(precision), "recall": float(recall), "f1": float(f1)}
 
 
 def main():
     # Parse arguments
-    parser = HfArgumentParser((ModelArguments, DataArguments, CustomTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataArguments, CustomTrainingArguments))  # type: ignore
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Initialize wandb
@@ -239,7 +240,7 @@ def main():
 
     # Evaluate on test set
     logger.info("Evaluating on test set...")
-    test_results = trainer.evaluate(test_dataset)
+    test_results = trainer.evaluate(test_dataset)  # type: ignore
     logger.info(f"Test results: {test_results}")
 
     # Save final model
