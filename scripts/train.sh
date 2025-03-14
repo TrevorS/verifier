@@ -5,8 +5,8 @@ set -e
 
 # Configuration
 MODEL="distilroberta-base"
-NUM_EPOCHS=1
-BATCH_SIZE=32
+NUM_EPOCHS=5
+BATCH_SIZE=128
 LEARNING_RATE=2e-5
 RUN_NAME="$MODEL-$NUM_EPOCHS-epoch-$BATCH_SIZE-batch-$LEARNING_RATE-lr-max-logging"
 OUTPUT_DIR="results/$RUN_NAME"

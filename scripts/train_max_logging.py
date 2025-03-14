@@ -224,6 +224,38 @@ def compute_metrics(eval_pred) -> dict[str, float]:
     }
 
 
+def save_failing_cases(predictions, labels, examples, output_dir: str):
+    """Save failing test cases to a JSONL file with detailed information."""
+    predictions_labels = np.argmax(predictions, axis=1)
+
+    # Calculate softmax probabilities for confidence scores
+    exp_preds = np.exp(predictions)
+    predictions_softmax = exp_preds / np.sum(exp_preds, axis=1, keepdims=True)
+
+    failing_cases = []
+    for i, (pred, label) in enumerate(zip(predictions_labels, labels)):
+        if pred != label:
+            case = {
+                "input": examples["verbal_amount"][i],
+                "decimal_amount": examples["decimal_amount"][i],
+                "expected_label": int(label),
+                "predicted_label": int(pred),
+                "confidence": float(predictions_softmax[i, pred]),
+                "match_probability": float(predictions_softmax[i, 1]),  # Probability of being a match
+                "mismatch_probability": float(predictions_softmax[i, 0]),  # Probability of being a mismatch
+            }
+            failing_cases.append(case)
+
+    # Save failing cases to JSONL file
+    output_file = os.path.join(output_dir, "failing_cases.jsonl")
+    with open(output_file, "w") as f:
+        for case in failing_cases:
+            f.write(json.dumps(case) + "\n")
+
+    logger.info(f"Saved {len(failing_cases)} failing cases to {output_file}")
+    return failing_cases
+
+
 def main():
     # Parse arguments
     parser = HfArgumentParser((ModelArguments, DataArguments, CustomTrainingArguments))  # type: ignore
@@ -342,9 +374,31 @@ def main():
     logger.info("Evaluating on test set...")
     test_results = trainer.evaluate(test_dataset)  # type: ignore
 
+    # Get raw predictions for test set
+    test_predictions = trainer.predict(test_dataset)
+
+    # Save failing cases
+    failing_cases = save_failing_cases(test_predictions.predictions, test_predictions.label_ids, test_data, training_args.output_dir)
+
+    # Add failing cases summary to wandb
+    if failing_cases:
+        failing_cases_table = wandb.Table(columns=["Input", "Decimal Amount", "Expected Label", "Predicted Label", "Confidence"])
+        for case in failing_cases:
+            failing_cases_table.add_data(
+                case["input"],
+                case["decimal_amount"],
+                "Match" if case["expected_label"] == 1 else "Mismatch",
+                "Match" if case["predicted_label"] == 1 else "Mismatch",
+                case["confidence"],
+            )
+        wandb.log({"test/failing_cases": failing_cases_table})
+
     # Convert test results to a format suitable for logging
     test_metrics = {f"test/{k.replace('eval_', '')}": v for k, v in test_results.items()}
     wandb.log(test_metrics)
+
+    # Add failing cases count to test metrics
+    test_metrics["test/failing_cases_count"] = len(failing_cases)
 
     # Log test results as a table
     test_results_table = wandb.Table(columns=["Metric", "Value"])
