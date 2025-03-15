@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Fine-tune DistilRoBERTa for verifying check amount matches between verbal and decimal representations.
+Enhanced with comprehensive metrics logging, calibration analysis, and training dynamics visualization.
 """
 
 import decimal
@@ -12,8 +13,9 @@ from dataclasses import dataclass
 
 import evaluate
 import numpy as np
+import wandb
 from datasets import Dataset
-from sklearn.metrics import average_precision_score, confusion_matrix, roc_auc_score
+from sklearn.metrics import brier_score_loss, confusion_matrix
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -21,11 +23,8 @@ from transformers import (
     EarlyStoppingCallback,
     HfArgumentParser,
     Trainer,
-    TrainerCallback,
     TrainingArguments,
 )
-
-import wandb
 
 # hush warnings related to tokenizer parallelization
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -88,8 +87,6 @@ class CustomTrainingArguments(TrainingArguments):
     load_best_model_at_end: bool = True
     metric_for_best_model: str = "f1"
     greater_is_better: bool = True
-
-    # Early stopping
     early_stopping_patience: int = 3
 
 
@@ -167,159 +164,95 @@ def prepare_dataset(data: list[dict]) -> Dataset:
 
 
 def compute_metrics(eval_pred) -> dict[str, float]:
-    """Compute comprehensive metrics for evaluation and debugging."""
+    """Compute metrics for evaluation."""
     predictions, labels = eval_pred
     predictions_labels = np.argmax(predictions, axis=1)
 
-    # Load metrics from evaluate
+    # Load core metrics from evaluate
     accuracy_metric = evaluate.load("accuracy")
-    precision_metric = evaluate.load("precision", zero_division=0)
-    recall_metric = evaluate.load("recall", zero_division=0)
     f1_metric = evaluate.load("f1", zero_division=0)
 
     accuracy_result = accuracy_metric.compute(predictions=predictions_labels, references=labels)
-    precision_result = precision_metric.compute(predictions=predictions_labels, references=labels)
-    recall_result = recall_metric.compute(predictions=predictions_labels, references=labels)
     f1_result = f1_metric.compute(predictions=predictions_labels, references=labels)
 
     accuracy = accuracy_result["accuracy"] if accuracy_result is not None else 0.0
-    precision = precision_result["precision"] if precision_result is not None else 0.0
-    recall = recall_result["recall"] if recall_result is not None else 0.0
     f1 = f1_result["f1"] if f1_result is not None else 0.0
 
-    # Compute softmax probabilities
-    exp_preds = np.exp(predictions)
-    predictions_softmax = exp_preds / np.sum(exp_preds, axis=1, keepdims=True)
-
-    # ROC AUC and PR AUC
-    try:
-        auc = roc_auc_score(labels, predictions_softmax[:, 1])
-        pr_auc = average_precision_score(labels, predictions_softmax[:, 1])
-    except ValueError:
-        auc = 0.0
-        pr_auc = 0.0
-
-    # Detailed confusion matrix metrics
+    # Compute confusion matrix
     cm = confusion_matrix(labels, predictions_labels)
     if cm.shape == (2, 2):
         TN, FP, FN, TP = cm.ravel()  # noqa: N806
-        specificity = TN / (TN + FP) if (TN + FP) > 0 else 0.0
-        npv = TN / (TN + FN) if (TN + FN) > 0 else 0.0  # Negative Predictive Value
-        fnr = FN / (FN + TP) if (FN + TP) > 0 else 0.0  # False Negative Rate
-        fpr = FP / (FP + TN) if (FP + TN) > 0 else 0.0  # False Positive Rate
     else:
-        specificity = npv = fnr = fpr = 0.0
+        TN, FP, FN, TP = 0, 0, 0, 0  # noqa: N806
 
-    # Confidence analysis
-    confidence_scores = np.max(predictions_softmax, axis=1)
-    mean_confidence = float(np.mean(confidence_scores))
-    mean_confidence_correct = float(np.mean(confidence_scores[predictions_labels == labels]))
-    mean_confidence_incorrect = float(np.mean(confidence_scores[predictions_labels != labels]))
+    # Compute softmax probabilities for confidence analysis
+    exp_preds = np.exp(predictions)
+    predictions_softmax = exp_preds / np.sum(exp_preds, axis=1, keepdims=True)
 
-    # Sample predictions for visualization
-    indices = np.arange(len(labels))
-    success_indices = indices[predictions_labels == labels]
-    failure_indices = indices[predictions_labels != labels]
+    # Brier score for calibration measurement
+    try:
+        brier_score = brier_score_loss(labels, predictions_softmax[:, 1])
+    except ValueError:
+        brier_score = 0.0
 
-    # Create wandb tables for success and failure samples
-    success_table = wandb.Table(columns=["True Label", "Predicted Label", "Confidence", "Match Probability", "Mismatch Probability"])
-    failure_table = wandb.Table(columns=["True Label", "Predicted Label", "Confidence", "Match Probability", "Mismatch Probability"])
-
-    # Random sample of successes and failures
-    num_samples = min(5, len(success_indices), len(failure_indices))
-
-    if num_samples > 0:
-        success_sample_indices = np.random.choice(success_indices, num_samples, replace=False)
-        failure_sample_indices = np.random.choice(failure_indices, num_samples, replace=False)
-
-        for idx in success_sample_indices:
-            success_table.add_data(
-                "Match" if labels[idx] == 1 else "Mismatch",
-                "Match" if predictions_labels[idx] == 1 else "Mismatch",
-                float(confidence_scores[idx]),
-                float(predictions_softmax[idx, 1]),
-                float(predictions_softmax[idx, 0]),
-            )
-
-        for idx in failure_sample_indices:
-            failure_table.add_data(
-                "Match" if labels[idx] == 1 else "Mismatch",
-                "Match" if predictions_labels[idx] == 1 else "Mismatch",
-                float(confidence_scores[idx]),
-                float(predictions_softmax[idx, 1]),
-                float(predictions_softmax[idx, 0]),
-            )
-
-    # Prediction distribution analysis
-    label_distribution = {
-        "true_positives": int(TP),
-        "true_negatives": int(TN),
-        "false_positives": int(FP),
-        "false_negatives": int(FN),
+    # Create metrics dictionary to log to wandb
+    wandb_metrics = {
+        # Standard metrics
+        "accuracy": float(accuracy),
+        "f1": float(f1),
+        "brier_score": float(brier_score),
+        # Distribution metrics
+        "label_distribution": {
+            "true_positives": int(TP),
+            "true_negatives": int(TN),
+            "false_positives": int(FP),
+            "false_negatives": int(FN),
+        },
+        # Confusion Matrix
+        "confusion_matrix": wandb.plot.confusion_matrix(probs=None, y_true=labels, preds=predictions_labels, class_names=["Mismatch", "Match"]),
     }
 
     # Log everything to wandb
-    wandb.log(
-        {
-            # Standard metrics
-            "accuracy": float(accuracy),
-            "precision": float(precision),
-            "recall": float(recall),
-            "f1": float(f1),
-            "auc": float(auc),
-            "pr_auc": float(pr_auc),
-            # Additional classification metrics
-            "specificity": float(specificity),
-            "negative_predictive_value": float(npv),
-            "false_negative_rate": float(fnr),
-            "false_positive_rate": float(fpr),
-            # Confidence metrics
-            "mean_confidence": mean_confidence,
-            "mean_confidence_correct": mean_confidence_correct,
-            "mean_confidence_incorrect": mean_confidence_incorrect,
-            # Distribution metrics
-            "label_distribution": wandb.Table(data=[[k, v] for k, v in label_distribution.items()], columns=["Category", "Count"]),
-            # Sample predictions as tables
-            "success_samples": success_table,
-            "failure_samples": failure_table,
-            # Confusion Matrix
-            "confusion_matrix": wandb.plot.confusion_matrix(probs=None, y_true=labels, preds=predictions_labels, class_names=["Mismatch", "Match"]),
-        }
-    )
+    wandb.log(wandb_metrics)
 
     # Return core metrics for model selection
     return {
         "accuracy": float(accuracy),
-        "precision": float(precision),
-        "recall": float(recall),
         "f1": float(f1),
-        "auc": float(auc),
-        "specificity": float(specificity),
+        "brier_score": float(brier_score),
     }
 
 
-class GradientTrackingCallback(TrainerCallback):
-    """Callback to track gradient norms during training."""
+def save_failing_cases(predictions, labels, examples, output_dir: str):
+    """Save failing test cases to a JSONL file with detailed information."""
+    predictions_labels = np.argmax(predictions, axis=1)
 
-    def __init__(self, log_every=100):
-        self.log_every = log_every
+    # Calculate softmax probabilities for confidence scores
+    exp_preds = np.exp(predictions)
+    predictions_softmax = exp_preds / np.sum(exp_preds, axis=1, keepdims=True)
 
-    def on_step_end(self, args, state, control, model=None, **kwargs):
-        if state.global_step % self.log_every == 0 and model is not None:
-            grad_norms = {}
-            for name, param in model.named_parameters():
-                if param.grad is not None:
-                    grad_norms[f"grad_norm/{name}"] = param.grad.norm().item()
+    failing_cases = []
+    for i, (pred, label) in enumerate(zip(predictions_labels, labels)):
+        if pred != label:
+            case = {
+                "input": examples["verbal_amount"][i],
+                "decimal_amount": examples["decimal_amount"][i],
+                "expected_label": int(label),
+                "predicted_label": int(pred),
+                "confidence": float(predictions_softmax[i, pred]),
+                "match_probability": float(predictions_softmax[i, 1]),  # Probability of being a match
+                "mismatch_probability": float(predictions_softmax[i, 0]),  # Probability of being a mismatch
+            }
+            failing_cases.append(case)
 
-            # Compute aggregate statistics
-            if grad_norms:
-                all_norms = list(grad_norms.values())
-                grad_norms["grad_norm/mean"] = np.mean(all_norms)
-                grad_norms["grad_norm/median"] = np.median(all_norms)
-                grad_norms["grad_norm/max"] = np.max(all_norms)
-                grad_norms["grad_norm/min"] = np.min(all_norms)
+    # Save failing cases to JSONL file
+    output_file = os.path.join(output_dir, "failing_cases.jsonl")
+    with open(output_file, "w") as f:
+        for case in failing_cases:
+            f.write(json.dumps(case) + "\n")
 
-                wandb.log(grad_norms, step=state.global_step)
+    logger.info(f"Saved {len(failing_cases)} failing cases to {output_file}")
+    return failing_cases
 
 
 def main():
@@ -330,14 +263,13 @@ def main():
     # Initialize wandb
     wandb.init(
         project="check-amount-verification",
-        name="distilroberta-check-verifier",
+        name=f"distilroberta-check-verifier-{wandb.util.generate_id()}",
         config={**vars(model_args), **vars(data_args), **vars(training_args)},
     )
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
 
-    # If auto_max_length flag is enabled, determine smart max length from training data
     logger.info("Auto-determining max_length based on training data...")
     raw_train_data = load_jsonl(data_args.train_file)
     lengths = []
@@ -350,15 +282,23 @@ def main():
             padding=False,
         )
         lengths.append(len(tokenized.get("input_ids", [])))
+
+    # get 95th percentile of lengths
     smart_max_length = int(np.percentile(lengths, 95))
+    # round smart_max_length to the nearest multiple of 8 (for batching)
+    smart_max_length = round(smart_max_length / 8) * 8
     model_args.max_length = smart_max_length
     logger.info(f"Auto-determined max_length: {smart_max_length}")
 
     # Load and process datasets
     logger.info("Loading datasets...")
-    train_data = prepare_dataset(load_jsonl(data_args.train_file))
-    eval_data = prepare_dataset(load_jsonl(data_args.validation_file))
-    test_data = prepare_dataset(load_jsonl(data_args.test_file))
+    raw_train_data = load_jsonl(data_args.train_file)
+    raw_eval_data = load_jsonl(data_args.validation_file)
+    raw_test_data = load_jsonl(data_args.test_file)
+
+    train_data = prepare_dataset(raw_train_data)
+    eval_data = prepare_dataset(raw_eval_data)
+    test_data = prepare_dataset(raw_test_data)
 
     # Define preprocess function with dynamic padding support
     def preprocess_function(examples):
@@ -378,14 +318,41 @@ def main():
     eval_dataset = eval_data.map(preprocess_function, batched=True, remove_columns=eval_data.column_names)
     test_dataset = test_data.map(preprocess_function, batched=True, remove_columns=test_data.column_names)
 
-    # Initialize DataCollatorWithPadding if dynamic padding is enabled
+    # Analyze class distribution
+    train_labels = train_dataset["labels"]
+    eval_labels = eval_dataset["labels"]
+    test_labels = test_dataset["labels"]
+
+    train_pos = sum(train_labels)
+    train_neg = len(train_labels) - train_pos
+    eval_pos = sum(eval_labels)
+    eval_neg = len(eval_labels) - eval_pos
+    test_pos = sum(test_labels)
+    test_neg = len(test_labels) - test_pos
+
+    class_dist_table = wandb.Table(columns=["Split", "Positive (Match)", "Negative (Mismatch)", "Positive %", "Negative %"])
+    class_dist_table.add_data("Train", train_pos, train_neg, train_pos / len(train_labels) * 100, train_neg / len(train_labels) * 100)
+    class_dist_table.add_data("Validation", eval_pos, eval_neg, eval_pos / len(eval_labels) * 100, eval_neg / len(eval_labels) * 100)
+    class_dist_table.add_data("Test", test_pos, test_neg, test_pos / len(test_labels) * 100, test_neg / len(test_labels) * 100)
+
+    # Log dataset statistics
+    wandb.log(
+        {
+            "dataset/train_size": len(train_dataset),
+            "dataset/eval_size": len(eval_dataset),
+            "dataset/test_size": len(test_dataset),
+            "dataset/class_distribution": class_dist_table,
+        }
+    )
+
+    # Initialize collator
     data_collator = DataCollatorWithPadding(tokenizer)
 
     # Initialize model
     logger.info("Initializing model...")
     model = AutoModelForSequenceClassification.from_pretrained(model_args.model_name_or_path, num_labels=2)
 
-    # Initialize trainer with additional callbacks
+    # Initialize trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -395,7 +362,6 @@ def main():
         compute_metrics=compute_metrics,
         callbacks=[
             EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience),
-            GradientTrackingCallback(log_every=training_args.logging_steps),
         ],
     )
 
@@ -406,11 +372,63 @@ def main():
     # Evaluate on test set
     logger.info("Evaluating on test set...")
     test_results = trainer.evaluate(test_dataset)  # type: ignore
-    logger.info(f"Test results: {test_results}")
+
+    # Get raw predictions for test set
+    test_predictions = trainer.predict(test_dataset)
+
+    # Save failing cases
+    failing_cases = save_failing_cases(test_predictions.predictions, test_predictions.label_ids, test_data, training_args.output_dir)
+
+    # Add failing cases summary to wandb
+    if failing_cases:
+        failing_cases_table = wandb.Table(columns=["Input", "Decimal Amount", "Expected Label", "Predicted Label", "Confidence"])
+        for case in failing_cases:
+            failing_cases_table.add_data(
+                case["input"],
+                case["decimal_amount"],
+                "Match" if case["expected_label"] == 1 else "Mismatch",
+                "Match" if case["predicted_label"] == 1 else "Mismatch",
+                case["confidence"],
+            )
+        wandb.log({"test/failing_cases": failing_cases_table})
+
+    # Convert test results to a format suitable for logging
+    test_metrics = {f"test/{k.replace('eval_', '')}": v for k, v in test_results.items()}
+    wandb.log(test_metrics)
+
+    # Add failing cases count to test metrics
+    test_metrics["test/failing_cases_count"] = len(failing_cases)
+
+    # Log test results as a table
+    test_results_table = wandb.Table(columns=["Metric", "Value"])
+
+    for k, v in test_metrics.items():
+        test_results_table.add_data(k, v)
+
+    wandb.log({"test/results_summary": test_results_table})
 
     # Save final model
     trainer.save_model(training_args.output_dir)
     tokenizer.save_pretrained(training_args.output_dir)
+
+    # Create a model summary
+    model_summary = {
+        "model_name": model_args.model_name_or_path,
+        "task": "Check amount verification",
+        "train_samples": len(train_dataset),
+        "eval_samples": len(eval_dataset),
+        "test_samples": len(test_dataset),
+        "epochs": training_args.num_train_epochs,
+        "learning_rate": training_args.learning_rate,
+        "batch_size": training_args.per_device_train_batch_size,
+        "max_length": model_args.max_length,
+        "test_accuracy": test_metrics.get("test/accuracy", 0.0),
+        "test_f1": test_metrics.get("test/f1", 0.0),
+        "test_expected_calibration_error": test_metrics.get("test/expected_calibration_error", 0.0),
+    }
+
+    # Log model summary
+    wandb.summary.update(model_summary)
 
     # Close wandb
     wandb.finish()

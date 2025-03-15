@@ -72,5 +72,4 @@ tests/models
 .coverage*
 eval_results/
 data/
-hold/
 results/

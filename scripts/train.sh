@@ -22,7 +22,7 @@ mkdir -p "$OUTPUT_DIR"
 
 # Run training
 echo "Starting training..."
-python scripts/train_max_logging.py \
+python scripts/train.py \
     --output_dir "$OUTPUT_DIR" \
     --num_train_epochs "$NUM_EPOCHS" \
     --per_device_train_batch_size "$BATCH_SIZE" \

@@ -3,17 +3,17 @@ Data generation module for creating synthetic training data.
 """
 
 import json
+import math
 import os
 import random
 import re
 import string
 from pathlib import Path
 
+import datasets
 import inflect
 import numpy as np
 
-# Import the new check formatting variations
-from src.utils.decimal_utils import format_amount
 from src.utils.text_utils import normalize_text
 
 # Create a global inflect engine for use across all variation functions
@@ -37,9 +37,6 @@ def register_variation(name, weight=1.0):
         return func
 
     return decorator
-
-
-# Helper functions for variations
 
 
 def dollars_to_words(dollars):
@@ -97,9 +94,6 @@ def unhyphenate_compound(text):
 def is_round_amount(amount):
     """Check if an amount is a whole number of dollars."""
     return amount == int(amount)
-
-
-# Variation functions
 
 
 @register_variation("standard", weight=10.0)
@@ -802,9 +796,6 @@ def donation_check_format(amount):
     return " ".join(result)
 
 
-# Security-Focused Formats
-
-
 @register_variation("check_asterisks", weight=4.0)
 def check_asterisks_format(amount: float) -> str:
     """
@@ -842,9 +833,6 @@ def check_dashed_line_format(amount: float) -> str:
     return f"{prefix}{base}{suffix}"
 
 
-# Business Check Formats
-
-
 @register_variation("business_check_exact", weight=4.0)
 def business_check_exact_format(amount: float) -> str:
     """
@@ -870,9 +858,6 @@ def business_check_no_more_format(amount: float) -> str:
     dollar_words = dollars_to_words(dollars)
     prefix = random.choice(["not to exceed", "not more than", "up to"])
     return f"{prefix} {dollar_words} and {cents:02d}/100 dollars"
-
-
-# Regional Check Variations
 
 
 @register_variation("northeast_check", weight=2.5)
@@ -907,9 +892,6 @@ def midwest_check_format(amount: float) -> str:
     dollar_words = dollars_to_words(dollars)
     dollar_text = f"{dollar_words} dollars"
     return f"{dollar_text} & {cents:02d}/100"
-
-
-# Payment-Specific Formats
 
 
 @register_variation("payroll_check", weight=3.0)
@@ -953,9 +935,6 @@ def vendor_payment_check_format(amount: float) -> str:
     return f"{prefix} {dollar_words} and {cents:02d}/100 dollars"
 
 
-# First-Party Check Formats
-
-
 @register_variation("first_party_check", weight=2.0)
 def first_party_check_format(amount: float) -> str:
     """
@@ -984,9 +963,6 @@ def self_check_format(amount: float) -> str:
     return f"{dollar_words} and {cents:02d}/100 dollars{self_text}"
 
 
-# Error-Prone and Edge Case Formats
-
-
 @register_variation("check_no_space_format", weight=1.5)
 def check_no_space_format(amount: float) -> str:
     """
@@ -998,9 +974,7 @@ def check_no_space_format(amount: float) -> str:
 
     dollar_words = dollars_to_words(dollars)
 
-    # Remove spaces at different points
     if random.random() < 0.33:
-        # Remove space before "and"
         return f"{dollar_words}and {cents:02d}/100 dollars"
     elif random.random() < 0.67:
         # Remove space after "and"
@@ -1021,9 +995,6 @@ def check_trailing_dash_format(amount: float) -> str:
 
     dollar_words = dollars_to_words(dollars)
     return f"{dollar_words} and {cents:02d}/100 dollars---"
-
-
-# Charity and Gift Check Formats
 
 
 @register_variation("donation_check_purpose", weight=2.0)
@@ -1054,9 +1025,6 @@ def gift_check_format(amount: float) -> str:
     return f"{prefix}{dollar_words} and {cents:02d}/100 dollars"
 
 
-# Common Numerical-Format Mixes
-
-
 @register_variation("mixed_format_check", weight=2.0)
 def mixed_format_check(amount: float) -> str:
     """
@@ -1085,9 +1053,6 @@ def dollars_numeric_cents_verbal_format(amount: float) -> str:
     return f"${dollars} and {cent_words} cents"
 
 
-# Date-Related and Security Features
-
-
 @register_variation("void_after_date", weight=1.5)
 def void_after_date_format(amount: float) -> str:
     """
@@ -1114,9 +1079,6 @@ def nonrefundable_check_format(amount: float) -> str:
     dollar_words = dollars_to_words(dollars)
     suffix = random.choice([" nonrefundable", " (nonrefundable)", " - nonrefundable"])
     return f"{dollar_words} and {cents:02d}/100 dollars{suffix}"
-
-
-# Purpose-Specific Check Formats
 
 
 @register_variation("rent_check", weight=2.0)
@@ -1158,9 +1120,6 @@ def check_for_service_format(amount: float) -> str:
     dollar_words = dollars_to_words(dollars)
     service_text = random.choice([" for services rendered", " for professional services", " for service"])
     return f"{dollar_words} and {cents:02d}/100 dollars{service_text}"
-
-
-# Check-specific augmentation function
 
 
 def apply_check_specific_augmentation(
@@ -1326,10 +1285,11 @@ def generate_stratified_amounts(num_examples):
         (1000.00, 9999.99),  # Thousands
         (10000.00, 99999.99),  # Tens of thousands
         (100000.00, 1000000.00),  # Hundreds of thousands to million
+        (1000000.00, 10000000.00),  # Millions
     ]
 
     # Assign more weight to common ranges (cents, single, double, triple-digit dollars)
-    weights = [0.15, 0.20, 0.20, 0.15, 0.15, 0.10, 0.05]
+    weights = [0.15, 0.20, 0.20, 0.15, 0.15, 0.10, 0.025, 0.025]
 
     # Determine number of examples per range
     counts = [int(num_examples * w) for w in weights]
@@ -1439,14 +1399,14 @@ def apply_augmentation(text, dropout_prob=0.05, case_change_prob=0.2):
 
 def generate_examples(num_examples, control_variation_distribution=True):
     """
-    Generate examples of verbal monetary expressions and their JSON representations.
+    Generate examples of verbal monetary expressions and their decimal representations.
 
     Args:
         num_examples (int): Number of examples to generate
         control_variation_distribution (bool): Whether to manually control variation distribution
 
     Returns:
-        list: List of dictionaries with input and target fields
+        list: List of dictionaries with input and amount fields
     """
     # Generate stratified amounts
     amounts = generate_stratified_amounts(num_examples)
@@ -1502,10 +1462,8 @@ def generate_examples(num_examples, control_variation_distribution=True):
             examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_target_output(amount),
                     "amount": float(format(amount, ".2f")),
                     "variation": variation,
-                    "examples": [],
                 }
             )
     else:
@@ -1518,117 +1476,12 @@ def generate_examples(num_examples, control_variation_distribution=True):
             examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_target_output(amount),
                     "amount": float(format(amount, ".2f")),
                     "variation": variation_name,
-                    "examples": [],
                 }
             )
 
     return examples
-
-
-def create_target_output(amount, delimiter="|"):
-    """
-    Create a target output for a given amount using precise decimal arithmetic.
-    This function handles cases like 9.995 correctly (rounds to 10.00) and avoids
-    common floating-point issues (e.g. 1.6099999999999999 becoming 1.60 instead of 1.61).
-
-    Args:
-        amount (float): The numeric value to format.
-        delimiter (str): The delimiter to use between dollars and cents.
-
-    Returns:
-        str: A string representing the amount in 'dollars|cents' format.
-    """
-    return format_amount(amount, delimiter=delimiter)
-
-
-def generate_dataset(num_examples=10000, output_dir=None, train_ratio=0.8):
-    """
-    Generate a synthetic dataset of verbal monetary expressions and their JSON
-    representations.
-
-    Args:
-        num_examples (int): Number of examples to generate
-        output_dir (str or Path): Directory to save the generated data
-        train_ratio (float): Ratio of examples to use for training (vs validation)
-
-    Returns:
-        tuple: Paths to the generated train and validation files
-    """
-    # Set up output directory
-    if output_dir is None:
-        # Default to 'data' directory in the project root
-        output_dir = Path(__file__).parents[1] / "data"
-    else:
-        output_dir = Path(output_dir)
-
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Calculate split sizes
-    train_size = int(num_examples * train_ratio)
-    # The validation size is implicitly num_examples - train_size
-
-    # Generate examples
-    examples = generate_examples(num_examples)
-
-    # Shuffle examples
-    random.shuffle(examples)
-
-    # Split into train and validation sets
-    train_examples = examples[:train_size]
-    val_examples = examples[train_size:]
-
-    # Save to files
-    train_path = output_dir / "train.jsonl"
-    val_path = output_dir / "val.jsonl"
-
-    # Write train data
-    with open(train_path, "w") as f:
-        for example in train_examples:
-            f.write(json.dumps(example) + "\n")
-
-    # Write validation data
-    with open(val_path, "w") as f:
-        for example in val_examples:
-            f.write(json.dumps(example) + "\n")
-
-    print(f"Generated {len(train_examples)} training examples and {len(val_examples)} validation examples")
-    print(f"Training data saved to: {train_path}")
-    print(f"Validation data saved to: {val_path}")
-
-    # Analyze variation distribution
-    variation_count = {name: 0 for name in VARIATIONS.keys()}
-
-    for example in examples:
-        variation = example.get("variation", "unknown")
-        if variation in variation_count:
-            variation_count[variation] += 1
-        else:
-            variation_count["unknown"] = variation_count.get("unknown", 0) + 1
-
-    # Print variation distribution
-    print("\nVariation distribution:")
-    for var_name, count in sorted(variation_count.items(), key=lambda x: x[1], reverse=True):
-        if count > 0:
-            percentage = (count / num_examples) * 100
-            print(f"{var_name}: {count} examples ({percentage:.1f}%)")
-
-    # Sample examples for inspection
-    sample_size = min(10, num_examples)
-    sample_examples = random.sample(examples, sample_size)
-
-    print("\nSample examples:")
-    for i, example in enumerate(sample_examples, 1):
-        print(f"\nExample {i}:")
-        print(f"Input:  {example['input']}")
-        print(f"Target: {example['target']}")
-        print(f"Amount: ${example['amount']:.2f}")
-        print(f"Variation: {example['variation']}")
-
-    return train_path, val_path
 
 
 def create_complete_dataset(
@@ -1639,13 +1492,9 @@ def create_complete_dataset(
     output_dir=None,
     seed=42,
     augmentation_ratio=0.3,
-    example_ratio=0.3,  # Add parameter for example ratio
     hard_examples_ratio=0.05,
 ):
     """Create a complete dataset with train, validation, and test splits."""
-    import math
-
-    import datasets
 
     # Set random seed for reproducibility
     random.seed(seed)
@@ -1721,18 +1570,17 @@ def create_complete_dataset(
         # Add has_cents flag
         example["has_cents"] = (amount % 1) != 0
 
-    # Combine all examples before adding examples
+    # Combine all examples before augmentation
     all_examples = regular_examples + hard_examples
-
-    # Now add examples using the metadata
-    print(f"Adding examples to {example_ratio * 100:.1f}% of examples...")
-    all_examples = add_examples_to_dataset(all_examples, example_ratio=example_ratio, debug=True)
 
     # Apply augmentation
     print("Applying augmentation...")
     for example in all_examples:
         if random.random() < augmentation_ratio:
-            example["input"] = apply_augmentation(example["input"])
+            if random.random() < 0.5:
+                example["input"] = apply_augmentation(example["input"])
+            else:
+                example["input"] = apply_check_specific_augmentation(example["input"])
             example["augmented"] = True
         else:
             example["augmented"] = False
@@ -1795,11 +1643,6 @@ def print_dataset_statistics(dataset):
     for split in dataset:
         print(f"- {split.capitalize()}: {len(dataset[split])} examples")
 
-        # Count examples with examples
-        examples_with_examples = sum(1 for ex in dataset[split] if ex["examples"])
-        example_percentage = (examples_with_examples / len(dataset[split])) * 100
-        print(f"  - With examples: {examples_with_examples} ({example_percentage:.1f}%)")
-
     # Variation distribution
     print("\nVariation Distribution (Top 10):")
     for split in dataset:
@@ -1842,7 +1685,6 @@ def display_sample_examples(dataset, num_examples=5):
 
             print(f"\nExample {i + 1}:")
             print(f"Input: {example['input']}")
-            print(f"Target: {example['target']}")
             print(f"Amount: ${example['amount']:.2f}")
             print(f"Variation: {example['variation']}")
             print(f"Amount Range: {example['amount_range']}")
@@ -1888,7 +1730,6 @@ def generate_hard_examples(num_hard_examples=500):
             hard_examples.append(
                 {
                     "input": verbal_expr,
-                    "target": create_target_output(amount),
                     "amount": float(format(amount, ".2f")),
                     "variation": variation,
                     "hard_example": True,  # Mark as hard example
@@ -1930,107 +1771,3 @@ def classify_complexity(text):
         return "medium"
     else:
         return "simple"
-
-
-def add_examples_to_dataset(examples, example_ratio=0.3, debug=False):
-    """
-    Add examples to a subset of the dataset.
-    Each example will get one related example (same variation and amount range).
-    If an exact match cannot be found, will try to find a similar example.
-
-    Args:
-        examples (list): List of example dictionaries
-        example_ratio (float): Ratio of examples that should have an example added
-        debug (bool): Whether to print debug information
-
-    Returns:
-        list: Updated examples with examples added to the specified ratio
-    """
-    # Calculate how many examples should have examples
-    num_with_examples = int(len(examples) * example_ratio)
-
-    if debug:
-        print("\nDebug: Adding examples to dataset")
-        print(f"Total examples: {len(examples)}")
-        print(f"Target number with examples: {num_with_examples}")
-
-    # Randomly select which examples will get examples
-    examples_to_augment = random.sample(examples, num_with_examples)
-
-    # Create lookup dictionaries for finding similar examples
-    examples_by_variation_and_range = {}
-    examples_by_variation = {}
-    examples_by_range = {}
-
-    # Track statistics for debugging
-    match_stats = {"exact_match": 0, "variation_match": 0, "range_match": 0, "any_match": 0, "no_match": 0}
-
-    for ex in examples:
-        # Full match key (variation and range)
-        key = (ex["variation"], ex["amount_range"])
-        if key not in examples_by_variation_and_range:
-            examples_by_variation_and_range[key] = []
-        examples_by_variation_and_range[key].append(ex)
-
-        # Variation only
-        if ex["variation"] not in examples_by_variation:
-            examples_by_variation[ex["variation"]] = []
-        examples_by_variation[ex["variation"]].append(ex)
-
-        # Range only
-        if ex["amount_range"] not in examples_by_range:
-            examples_by_range[ex["amount_range"]] = []
-        examples_by_range[ex["amount_range"]].append(ex)
-
-    # Add examples to selected examples
-    for ex in examples_to_augment:
-        chosen_example = None
-
-        # Try to find exact match first (same variation and range)
-        key = (ex["variation"], ex["amount_range"])
-        potential_examples = [e for e in examples_by_variation_and_range[key] if e != ex]
-
-        if potential_examples:
-            chosen_example = random.choice(potential_examples)
-            match_stats["exact_match"] += 1
-        else:
-            # Try to find example with same variation
-            potential_examples = [e for e in examples_by_variation[ex["variation"]] if e != ex]
-            if potential_examples:
-                chosen_example = random.choice(potential_examples)
-                match_stats["variation_match"] += 1
-            else:
-                # Try to find example with same range
-                potential_examples = [e for e in examples_by_range[ex["amount_range"]] if e != ex]
-                if potential_examples:
-                    chosen_example = random.choice(potential_examples)
-                    match_stats["range_match"] += 1
-                else:
-                    # Last resort: pick any other example
-                    potential_examples = [e for e in examples if e != ex]
-                    if potential_examples:
-                        chosen_example = random.choice(potential_examples)
-                        match_stats["any_match"] += 1
-                    else:
-                        match_stats["no_match"] += 1
-
-        if chosen_example:
-            # Create a clean example dictionary with only necessary fields
-            example_dict = {"input": chosen_example["input"], "target": chosen_example["target"], "amount": chosen_example["amount"]}
-            ex["examples"].append(example_dict)
-
-    if debug:
-        print("\nMatch statistics:")
-        print(f"Exact matches: {match_stats['exact_match']}")
-        print(f"Variation matches: {match_stats['variation_match']}")
-        print(f"Range matches: {match_stats['range_match']}")
-        print(f"Any matches: {match_stats['any_match']}")
-        print(f"No matches: {match_stats['no_match']}")
-
-        actual_with_examples = sum(1 for ex in examples if ex["examples"])
-        actual_ratio = actual_with_examples / len(examples)
-        print("\nFinal statistics:")
-        print(f"Examples with examples: {actual_with_examples}")
-        print(f"Actual ratio achieved: {actual_ratio:.3f}")
-
-    return examples
