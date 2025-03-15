@@ -12,6 +12,7 @@ from pathlib import Path
 import inflect
 import numpy as np
 
+# Import the new check formatting variations
 from src.utils.decimal_utils import format_amount
 from src.utils.text_utils import normalize_text
 
@@ -801,7 +802,469 @@ def donation_check_format(amount):
     return " ".join(result)
 
 
-# Add more variations here...
+# Security-Focused Formats
+
+
+@register_variation("check_asterisks", weight=4.0)
+def check_asterisks_format(amount: float) -> str:
+    """
+    Format with asterisks to prevent insertion of additional text.
+    Example: 25.10 → "***twenty-five and 10/100 dollars***"
+    Example: 25.10 → "***twenty-five and 10/100 dollars only***"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    base = f"{dollar_words} and {cents:02d}/100 dollars"
+
+    if random.random() < 0.5:
+        base += " only"
+
+    return f"***{base}***"
+
+
+@register_variation("check_dashed_line", weight=4.0)
+def check_dashed_line_format(amount: float) -> str:
+    """
+    Format with dashes before and/or after to prevent insertion.
+    Example: 25.10 → "----twenty-five and 10/100 dollars----"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    base = f"{dollar_words} and {cents:02d}/100 dollars"
+
+    prefix = "----" if random.random() < 0.7 else ""
+    suffix = "----" if random.random() < 0.7 else ""
+
+    return f"{prefix}{base}{suffix}"
+
+
+# Business Check Formats
+
+
+@register_variation("business_check_exact", weight=4.0)
+def business_check_exact_format(amount: float) -> str:
+    """
+    Business format with "exactly" prefix.
+    Example: 3456.78 → "exactly three thousand four hundred fifty-six and 78/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    return f"exactly {dollar_words} and {cents:02d}/100 dollars"
+
+
+@register_variation("business_check_no_more", weight=3.0)
+def business_check_no_more_format(amount: float) -> str:
+    """
+    Business format with "not to exceed" language.
+    Example: 5432.10 → "not to exceed five thousand four hundred thirty-two and 10/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    prefix = random.choice(["not to exceed", "not more than", "up to"])
+    return f"{prefix} {dollar_words} and {cents:02d}/100 dollars"
+
+
+# Regional Check Variations
+
+
+@register_variation("northeast_check", weight=2.5)
+def northeast_check_format(amount: float) -> str:
+    """
+    Northeastern US check writing style.
+    Example: 1234.56 → "one thousand two hundred thirty-four dollars and 56/100"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0:
+        return f"zero dollars and {cents:02d}/100"
+
+    dollar_words = dollars_to_words(dollars)
+    dollar_text = f"{dollar_words} dollars"
+    return f"{dollar_text} and {cents:02d}/100"
+
+
+@register_variation("midwest_check", weight=2.5)
+def midwest_check_format(amount: float) -> str:
+    """
+    Midwestern US check writing style.
+    Example: 1234.56 → "one thousand two hundred thirty-four dollars & 56/100"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0:
+        return f"zero dollars & {cents:02d}/100"
+
+    dollar_words = dollars_to_words(dollars)
+    dollar_text = f"{dollar_words} dollars"
+    return f"{dollar_text} & {cents:02d}/100"
+
+
+# Payment-Specific Formats
+
+
+@register_variation("payroll_check", weight=3.0)
+def payroll_check_format(amount: float) -> str:
+    """
+    Format commonly used on payroll checks.
+    Example: 1234.56 → "pay exactly one thousand two hundred thirty-four and 56/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    prefix = random.choice(["pay", "pay exactly", "payroll amount"])
+    return f"{prefix} {dollar_words} and {cents:02d}/100 dollars"
+
+
+@register_variation("payee_check", weight=2.5)
+def payee_check_format(amount: float) -> str:
+    """
+    Format with "pay to the order of" prefix (often includes payee name but we'll omit that).
+    Example: 1234.56 → "pay to the order of one thousand two hundred thirty-four and 56/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    return f"pay to the order of {dollar_words} and {cents:02d}/100 dollars"
+
+
+@register_variation("vendor_payment_check", weight=2.0)
+def vendor_payment_check_format(amount: float) -> str:
+    """
+    Format for business-to-vendor payments.
+    Example: 4321.98 → "vendor payment four thousand three hundred twenty-one and 98/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    prefix = random.choice(["vendor payment", "contract payment", "invoice payment"])
+    return f"{prefix} {dollar_words} and {cents:02d}/100 dollars"
+
+
+# First-Party Check Formats
+
+
+@register_variation("first_party_check", weight=2.0)
+def first_party_check_format(amount: float) -> str:
+    """
+    Format commonly used when writing checks to oneself.
+    Example: 500.00 → "five hundred dollars and 00/100 - cash"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    suffix = random.choice([" - cash", " cash", " for cash"])
+    return f"{dollar_words} dollars and {cents:02d}/100{suffix}"
+
+
+@register_variation("self_check", weight=1.5)
+def self_check_format(amount: float) -> str:
+    """
+    Another format for checks to oneself.
+    Example: 200.00 → "two hundred and 00/100 dollars to self"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    self_text = random.choice([" to self", " for self", " - self"])
+    return f"{dollar_words} and {cents:02d}/100 dollars{self_text}"
+
+
+# Error-Prone and Edge Case Formats
+
+
+@register_variation("check_no_space_format", weight=1.5)
+def check_no_space_format(amount: float) -> str:
+    """
+    Format with missing spaces (common error).
+    Example: 25.10 → "twenty-fiveand10/100dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+
+    # Remove spaces at different points
+    if random.random() < 0.33:
+        # Remove space before "and"
+        return f"{dollar_words}and {cents:02d}/100 dollars"
+    elif random.random() < 0.67:
+        # Remove space after "and"
+        return f"{dollar_words} and{cents:02d}/100 dollars"
+    else:
+        # Remove space before "dollars"
+        return f"{dollar_words} and {cents:02d}/100dollars"
+
+
+@register_variation("check_trailing_dash", weight=1.5)
+def check_trailing_dash_format(amount: float) -> str:
+    """
+    Format with trailing dash (common security measure).
+    Example: 25.10 → "twenty-five and 10/100 dollars---"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    return f"{dollar_words} and {cents:02d}/100 dollars---"
+
+
+# Charity and Gift Check Formats
+
+
+@register_variation("donation_check_purpose", weight=2.0)
+def donation_check_purpose_format(amount: float) -> str:
+    """
+    Format used for donation checks with purpose.
+    Example: 100.00 → "one hundred and 00/100 dollars donation"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    suffix = random.choice([" donation", " charitable contribution", " gift"])
+    return f"{dollar_words} and {cents:02d}/100 dollars{suffix}"
+
+
+@register_variation("gift_check", weight=1.5)
+def gift_check_format(amount: float) -> str:
+    """
+    Format used for gift checks.
+    Example: 50.00 → "gift amount: fifty and 00/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    prefix = random.choice(["gift amount: ", "gift of ", "present: "])
+    return f"{prefix}{dollar_words} and {cents:02d}/100 dollars"
+
+
+# Common Numerical-Format Mixes
+
+
+@register_variation("mixed_format_check", weight=2.0)
+def mixed_format_check(amount: float) -> str:
+    """
+    Format that mixes numeric and verbal, common in handwritten checks.
+    Example: 1234.56 → "1234 and 56/100 dollars"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    return f"{dollars} and {cents:02d}/100 dollars"
+
+
+@register_variation("dollars_numeric_cents_verbal", weight=1.5)
+def dollars_numeric_cents_verbal_format(amount: float) -> str:
+    """
+    Mixes numeric dollars with verbal cents.
+    Example: 1234.56 → "$1234 and fifty-six cents"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if cents == 0:
+        return f"${dollars} and no cents"
+
+    cent_words = cents_to_words(cents)
+    return f"${dollars} and {cent_words} cents"
+
+
+# Date-Related and Security Features
+
+
+@register_variation("void_after_date", weight=1.5)
+def void_after_date_format(amount: float) -> str:
+    """
+    Format with void-after clause (common security measure).
+    Example: 1234.56 → "one thousand two hundred thirty-four and 56/100 dollars - void after 90 days"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    days = random.choice(["30", "60", "90", "120"])
+    return f"{dollar_words} and {cents:02d}/100 dollars - void after {days} days"
+
+
+@register_variation("nonrefundable_check", weight=1.0)
+def nonrefundable_check_format(amount: float) -> str:
+    """
+    Format for nonrefundable payments.
+    Example: 500.00 → "five hundred and 00/100 dollars nonrefundable"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    suffix = random.choice([" nonrefundable", " (nonrefundable)", " - nonrefundable"])
+    return f"{dollar_words} and {cents:02d}/100 dollars{suffix}"
+
+
+# Purpose-Specific Check Formats
+
+
+@register_variation("rent_check", weight=2.0)
+def rent_check_format(amount: float) -> str:
+    """
+    Format specifically for rent payments.
+    Example: 1500.00 → "one thousand five hundred and 00/100 dollars (rent)"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    return f"{dollar_words} and {cents:02d}/100 dollars (rent)"
+
+
+@register_variation("mortgage_check", weight=1.5)
+def mortgage_check_format(amount: float) -> str:
+    """
+    Format for mortgage payments.
+    Example: 2500.00 → "two thousand five hundred and 00/100 dollars - mortgage payment"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    suffix = random.choice([" - mortgage payment", " mortgage", " (mortgage)"])
+    return f"{dollar_words} and {cents:02d}/100 dollars{suffix}"
+
+
+@register_variation("check_for_service", weight=1.5)
+def check_for_service_format(amount: float) -> str:
+    """
+    Format for service payments.
+    Example: 250.00 → "two hundred fifty and 00/100 dollars for services rendered"
+    """
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    dollar_words = dollars_to_words(dollars)
+    service_text = random.choice([" for services rendered", " for professional services", " for service"])
+    return f"{dollar_words} and {cents:02d}/100 dollars{service_text}"
+
+
+# Check-specific augmentation function
+
+
+def apply_check_specific_augmentation(
+    text: str, prob_handwriting_errors: float = 0.2, prob_capitalization: float = 0.15, prob_punctuation_errors: float = 0.1
+) -> str:
+    """
+    Apply augmentations that mimic common check writing errors.
+
+    Args:
+        text (str): Original text to augment
+        prob_handwriting_errors (float): Probability of introducing handwriting-like errors
+        prob_capitalization (float): Probability of altering capitalization
+        prob_punctuation_errors (float): Probability of introducing punctuation errors
+
+    Returns:
+        str: Augmented text
+    """
+    words = text.split()
+    augmented_words = []
+
+    # Track if we've seen certain key words
+    seen_and = False
+    seen_dollars = False
+
+    for word in words:
+        # Check for key words
+        if word.lower() == "and":
+            seen_and = True
+        if word.lower() == "dollars" or word.lower() == "dollar":
+            seen_dollars = True
+
+        # Apply handwriting simulation errors
+        if random.random() < prob_handwriting_errors:
+            error_type = random.choice(["legibility", "cramping", "abbreviation"])
+
+            if error_type == "legibility" and len(word) > 3:
+                # Simulate illegible writing by slightly altering a character
+                idx = random.randint(1, len(word) - 2)  # Avoid first/last char
+                replacement_options = {
+                    "e": ["c", "o"],
+                    "a": ["o", "u"],
+                    "n": ["m", "r"],
+                    "u": ["v", "n"],
+                    "v": ["u", "w"],
+                    "w": ["v", "m"],
+                    "r": ["n", "v"],
+                    "m": ["n", "w"],
+                    "c": ["e", "o"],
+                    "o": ["a", "e"],
+                    "i": ["l", "j"],
+                    "l": ["i", "t"],
+                    "t": ["l", "f"],
+                    "h": ["b", "n"],
+                    "b": ["h", "p"],
+                    "s": ["5", "8"],
+                    "5": ["s", "$"],
+                    "8": ["s", "B"],
+                    "0": ["o", "O"],
+                    "O": ["0", "o"],
+                }
+
+                if word[idx].lower() in replacement_options:
+                    replacements = replacement_options[word[idx].lower()]
+                    replacement = random.choice(replacements)
+                    word = word[:idx] + replacement + word[idx + 1 :]
+
+            elif error_type == "cramping" and seen_and and not seen_dollars:
+                # Simulate cramped writing where words run together
+                # Most common after "and" before "dollars"
+                if random.random() < 0.7:
+                    next_idx = words.index(word) + 1
+                    if next_idx < len(words):
+                        word = word + words[next_idx]
+                        words[next_idx] = ""  # Remove next word
+
+            elif error_type == "abbreviation" and word.lower() == "dollars":
+                # Sometimes people abbreviate dollars
+                abbr_options = ["dlrs", "dol", "dlr", "dolls", "dols"]
+                word = random.choice(abbr_options)
+
+        # Apply capitalization variations
+        if random.random() < prob_capitalization:
+            if word.lower() in ["dollars", "and", "only", "exactly", "amount"]:
+                # Business checks often capitalize certain words
+                word = word.upper()
+
+        # Apply punctuation errors
+        if random.random() < prob_punctuation_errors:
+            # Common punctuation errors in check writing
+            if "/" in word:  # Likely in the "xx/100" part
+                punct_error = random.choice(["omit", "wrong"])
+                if punct_error == "omit":
+                    word = word.replace("/", "")
+                else:
+                    word = word.replace("/", random.choice(["-", ".", "\\", ""]))
+
+            elif "-" in word:  # Likely in compound numbers
+                word = word.replace("-", random.choice([" ", "–", ""]))
+
+        if word:  # Only add non-empty words
+            augmented_words.append(word)
+
+    # Join words and normalize
+    return normalize_text(" ".join(augmented_words))
 
 
 def generate_random_amount(min_amount=0.01, max_amount=1000000.00):
