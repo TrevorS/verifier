@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 import evaluate
 import numpy as np
-import wandb
 from datasets import Dataset
 from sklearn.metrics import brier_score_loss, confusion_matrix
 from transformers import (
@@ -25,6 +24,8 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
+
+import wandb
 
 # hush warnings related to tokenizer parallelization
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
