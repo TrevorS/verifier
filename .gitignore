@@ -73,3 +73,5 @@ tests/models
 eval_results/
 data/
 results/
+gold-dataset/
+*.json
